@@ -70,6 +70,17 @@ def get_product_description() -> str:
     return _setting("product_description", "PRODUCT_DESCRIPTION", "our product")
 
 
+def get_contact_reply_email() -> str:
+    """The email address put into contact-form 'your email' fields, so
+    replies reach you. Falls back to mailbox 1's address if not set
+    explicitly."""
+    explicit = _setting("contact_reply_email", "CONTACT_REPLY_EMAIL", "")
+    if explicit:
+        return explicit
+    mailboxes = load_mailboxes()
+    return mailboxes[0].username if mailboxes else ""
+
+
 def get_daily_min_per_mailbox() -> int:
     return int(_setting("daily_min_per_mailbox", "DAILY_MIN_PER_MAILBOX", "10"))
 
