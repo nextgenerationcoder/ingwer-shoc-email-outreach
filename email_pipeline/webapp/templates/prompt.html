@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>AI prompt</h2>
+  <p class="muted">
+    This is the instruction sent to the AI model for every generated email.
+    {% if is_default %}Currently using the default prompt.{% else %}Currently using a custom prompt you saved.{% endif %}
+  </p>
+  <form method="post">
+    <textarea name="prompt">{{ prompt }}</textarea>
+    <div>
+      <button type="submit" name="action" value="save">Save prompt</button>
+      <button type="submit" name="action" value="reset" class="btn-secondary">Reset to default</button>
+    </div>
+  </form>
+  <p class="muted" style="margin-top:1rem">
+    Use <code>{name}</code>, <code>{company}</code>, <code>{sender_company}</code>, <code>{product_description}</code> as placeholders --
+    they get filled in per contact. Try changes on the <a href="{{ url_for('test_page') }}">Test &amp; Preview</a> page before running live.
+  </p>
+</div>
+{% endblock %}

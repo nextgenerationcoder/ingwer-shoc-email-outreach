@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post">
+  <div class="card">
+    <h2>AI &amp; sender info</h2>
+    <label>DeepSeek API key</label>
+    <input type="password" name="deepseek_api_key" value="{{ deepseek_api_key }}" placeholder="sk-...">
+    <p class="muted" style="margin:0.3rem 0 0">Leave blank to use a plain template instead of AI generation.</p>
+
+    <div class="grid-2">
+      <div>
+        <label>Sender company name</label>
+        <input type="text" name="sender_company_name" value="{{ sender_company_name }}">
+      </div>
+      <div>
+        <label>Product description</label>
+        <input type="text" name="product_description" value="{{ product_description }}" placeholder="e.g. handmade ginger chocolate">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Campaign pacing</h2>
+    <div class="grid-2">
+      <div>
+        <label>Emails per mailbox per day (min)</label>
+        <input type="number" name="daily_min_per_mailbox" value="{{ daily_min }}" min="1">
+      </div>
+      <div>
+        <label>Emails per mailbox per day (max)</label>
+        <input type="number" name="daily_max_per_mailbox" value="{{ daily_max }}" min="1">
+      </div>
+      <div>
+        <label>Send window start (hour, 0-23)</label>
+        <input type="number" name="send_window_start_hour" value="{{ window_start }}" min="0" max="23">
+      </div>
+      <div>
+        <label>Send window end (hour, 0-23)</label>
+        <input type="number" name="send_window_end_hour" value="{{ window_end }}" min="0" max="23">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Mailboxes</h2>
+    <p class="muted">Each mailbox is permanently assigned its own slice of contacts, so no two mailboxes ever email the same person.</p>
+    {% for n in [1, 2, 3, 4] %}
+    <fieldset>
+      <legend>Mailbox {{ n }}</legend>
+      <div class="grid-2">
+        <div>
+          <label>SMTP host</label>
+          <input type="text" name="mb{{ n }}_host" value="{{ mailboxes[n].smtp_host if n in mailboxes else '' }}" placeholder="smtp.example.com">
+        </div>
+        <div>
+          <label>SMTP port</label>
+          <input type="number" name="mb{{ n }}_port" value="{{ mailboxes[n].smtp_port if n in mailboxes else 587 }}">
+        </div>
+        <div>
+          <label>Username</label>
+          <input type="text" name="mb{{ n }}_username" value="{{ mailboxes[n].username if n in mailboxes else '' }}">
+        </div>
+        <div>
+          <label>Password</label>
+          <input type="password" name="mb{{ n }}_password" value="{{ mailboxes[n].password if n in mailboxes else '' }}">
+        </div>
+        <div>
+          <label>Display name (optional)</label>
+          <input type="text" name="mb{{ n }}_from_name" value="{{ mailboxes[n].from_name if n in mailboxes else '' }}">
+        </div>
+      </div>
+    </fieldset>
+    {% endfor %}
+  </div>
+
+  <button type="submit">Save settings</button>
+</form>
+{% endblock %}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Ingwer Shoc{% endblock %} &middot; Outreach</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#2c3c56" d="M52 12c6 0 9 6 8 12 5-3 12-1 13 6 1 6-4 10-9 11 6 2 10 8 8 14-2 7-10 9-16 6 2 6-2 13-9 14-7 1-12-5-12-11-4 4-11 4-15-1-4-5-2-12 3-15-6-1-10-7-9-13 1-6 7-10 13-9-3-5-1-12 5-14 3-1 6 0 8 2 0-6 4-12 12-12z"/>
+      </svg>
+      <span class="brand-text">Ingwer Shoc</span>
+    </div>
+    <nav class="tabs">
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
+      <a href="{{ url_for('contacts') }}" class="{{ 'active' if active=='contacts' else '' }}">Contacts</a>
+      <a href="{{ url_for('test_page') }}" class="{{ 'active' if active=='test' else '' }}">Test &amp; Preview</a>
+      <a href="{{ url_for('prompt_page') }}" class="{{ 'active' if active=='prompt' else '' }}">AI Prompt</a>
+      <a href="{{ url_for('settings_page') }}" class="{{ 'active' if active=='settings' else '' }}">Settings</a>
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ 'error' if category == 'error' else 'ok' }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

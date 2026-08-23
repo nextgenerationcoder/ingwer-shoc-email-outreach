@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Test &amp; preview</h2>
+  <p class="muted">Generate a sample email with a fake name/company -- nothing is saved or sent to any real contact unless you use "Send test email" below.</p>
+  <form method="post">
+    <div class="grid-2">
+      <div>
+        <label>Recipient name (for the preview)</label>
+        <input type="text" name="name" value="{{ form.name }}" placeholder="e.g. Anna">
+      </div>
+      <div>
+        <label>Recipient / shop company</label>
+        <input type="text" name="company" value="{{ form.company }}" placeholder="e.g. Bio Laden Berlin">
+      </div>
+    </div>
+    <button type="submit" name="action" value="preview">Generate preview</button>
+
+    <fieldset>
+      <legend>Optional: send this as a real test email</legend>
+      <label>Send to (your own inbox, to check it lands correctly)</label>
+      <input type="email" name="to_email" value="{{ form.to_email }}" placeholder="you@example.com">
+      <button type="submit" name="action" value="send_test" class="btn-secondary">Generate &amp; send test email</button>
+    </fieldset>
+  </form>
+
+  {% if result %}
+  <div class="preview-box">
+    <div class="subject">Subject: {{ result.subject }}</div>
+    <div>{{ result.body }}</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

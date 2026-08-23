@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Overview</h2>
+  <div class="stat-row">
+    <div class="stat"><div class="num">{{ counts.get('pending', 0) }}</div><div class="lbl">Pending</div></div>
+    <div class="stat"><div class="num">{{ counts.get('queued', 0) }}</div><div class="lbl">Queued today</div></div>
+    <div class="stat"><div class="num">{{ counts.get('sent', 0) }}</div><div class="lbl">Sent</div></div>
+    <div class="stat"><div class="num">{{ counts.get('unsubscribed', 0) }}</div><div class="lbl">Unsubscribed</div></div>
+    <div class="stat"><div class="num">{{ counts.get('failed', 0) }}</div><div class="lbl">Failed</div></div>
+  </div>
+  <p class="muted" style="margin-top:1rem">
+    {{ mailbox_count }} mailbox(es) configured &middot;
+    AI generation: {{ "connected" if has_api_key else "not connected (using plain template)" }}
+  </p>
+</div>
+
+<div class="card">
+  <h2>Run manually</h2>
+  <p class="muted">Normally these run on a daily / every-minute cron schedule. You can also trigger them by hand here.</p>
+  <form method="post" action="{{ url_for('run_plan') }}" style="display:inline">
+    <button type="submit">Plan today's batch</button>
+  </form>
+  <form method="post" action="{{ url_for('run_worker') }}" style="display:inline">
+    <button type="submit" class="btn-secondary">Send anything due now</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Recent queue activity</h2>
+  {% if recent %}
+  <table>
+    <tr><th>Contact</th><th>Mailbox</th><th>Scheduled</th><th>Status</th><th>Sent at</th></tr>
+    {% for r in recent %}
+    <tr>
+      <td>{{ r['email'] }}</td>
+      <td>{{ r['mailbox_id'] }}</td>
+      <td>{{ r['scheduled_at'] }}</td>
+      <td><span class="badge badge-{{ r['status'] }}">{{ r['status'] }}</span></td>
+      <td>{{ r['sent_at'] or '-' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Nothing queued yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
