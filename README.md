@@ -15,9 +15,11 @@ Plain Python + SQLite, no external workflow tool required.
 - **(c) ~10-15 emails/day per mailbox at random hours** — `plan_daily.py`
   picks `random.randint(10, 15)` contacts per mailbox and gives each a
   random timestamp inside the send window (default 08:00-21:00).
-- **(d) triggers every day** — `plan_daily.py` is meant to run once daily via
-  cron; it's idempotent (checks `plan_log`) so re-running it the same day
-  is a no-op.
+- **(d) triggers every day** — handled two ways depending on how you run
+  it: the webapp (see below) schedules itself internally once it's
+  deployed and running, or `plan_daily.py` can be run once daily via
+  external cron instead. Either way it's idempotent (checks `plan_log`)
+  so re-running it the same day is a no-op.
 
 ## Files
 
@@ -58,6 +60,40 @@ Then open http://localhost:5000. It has:
 
 Settings entered in the UI override the environment variables described
 below (DB takes priority; env vars are the fallback for headless/cron use).
+
+### Self-triggering (no external cron needed)
+
+The webapp process itself schedules the daily plan (00:05 server time)
+and the per-minute send check via APScheduler (`webapp/scheduler.py`) --
+as long as the webapp is deployed and running continuously, that's all
+that's needed to keep the campaign going. This means:
+
+- **The web process has to stay up 24/7.** If it's not running, nothing
+  gets planned or sent that day -- this is not a "visit the page to
+  trigger it" setup, it needs to be an always-on deployment (a small VPS,
+  or any host that keeps a Python process running, behind your
+  subdomain).
+- **Run exactly one worker process.** With gunicorn:
+  ```
+  gunicorn -w 1 -b 0.0.0.0:8000 email_pipeline.wsgi:app
+  ```
+  `-w 1` matters -- each worker process would run its own copy of the
+  scheduler, and more than one means duplicate/early sends. If your host
+  wants more concurrency for the web UI itself, keep the scheduler in a
+  single dedicated process instead and disable it in the others (not
+  set up here since one worker is plenty for this app's traffic).
+- **Server timezone matters.** The daily plan and the 08:00-21:00 send
+  window run in the server's local timezone, not necessarily yours --
+  check `date` on the host, or set the container/VM's timezone
+  explicitly, so emails actually go out when you expect.
+- Put a reverse proxy (nginx, Caddy, or your host's built-in one) in
+  front of gunicorn for TLS on your subdomain; gunicorn itself shouldn't
+  be exposed directly to the internet.
+
+If you'd rather not keep a process running yourself, any host that runs
+a persistent Python web service works (a small VPS with systemd, Fly.io,
+Railway, PythonAnywhere's "always-on task", etc.) -- the requirement is
+just "the process doesn't stop", not any specific platform.
 
 ## Setup (CLI / cron only, no UI)
 

@@ -3,11 +3,16 @@ Web UI for the outreach pipeline: connect mailbox/API credentials, edit the
 AI prompt, run test generations (and optional test sends) before anything
 goes to real contacts, and see/manage the contacts list and daily runs.
 
+This process also runs the daily planner and per-minute send worker in
+the background (see scheduler.py) -- as long as this webapp is deployed
+and running, the campaign runs itself with no separate cron needed.
+
 Run with:
     python -m email_pipeline.webapp.app
 then open http://localhost:5000
 """
 import io
+import os
 import csv as csv_module
 
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -18,9 +23,16 @@ from ..generate import generate_from_fields, DEFAULT_PROMPT_TEMPLATE
 from ..sender import send_email
 from ..plan_daily import plan_today
 from ..worker import run_due_sends
+from .scheduler import start_scheduler
 
 app = Flask(__name__)
-app.secret_key = "dev-only-secret-change-me"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-only-secret-change-me")
+
+# Started once per process at import time. The dev server below runs
+# with use_reloader=False specifically so this only ever starts once;
+# in production, run a single worker process (e.g. `gunicorn -w 1`) so
+# these jobs don't double-run.
+start_scheduler()
 
 
 @app.before_request
@@ -221,4 +233,4 @@ def settings_page():
 
 if __name__ == "__main__":
     db.init_db()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, use_reloader=False, host="0.0.0.0", port=5000)
