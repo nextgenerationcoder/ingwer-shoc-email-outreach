@@ -2,3 +2,4 @@ flask
 openai
 apscheduler
 gunicorn
+playwright

@@ -23,6 +23,7 @@ from ..generate import generate_from_fields, DEFAULT_PROMPT_TEMPLATE
 from ..sender import send_email
 from ..plan_daily import plan_today
 from ..worker import run_due_sends
+from ..form_crawler import crawl_target_headless
 from .scheduler import start_scheduler
 
 app = Flask(__name__)
@@ -133,6 +134,111 @@ def unsubscribe_route(contact_id):
     return redirect(url_for("contacts"))
 
 
+@app.route("/forms")
+def forms_page():
+    with db.connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM form_targets ORDER BY id DESC LIMIT 300"
+        ).fetchall()
+        counts = {
+            r["status"]: r["c"]
+            for r in conn.execute(
+                "SELECT status, COUNT(*) c FROM form_targets GROUP BY status"
+            ).fetchall()
+        }
+    return render_template("forms.html", active="forms", targets=rows, counts=counts)
+
+
+@app.route("/forms/import", methods=["POST"])
+def import_forms_route():
+    file = request.files.get("csv_file")
+    if not file or not file.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("forms_page"))
+
+    text = file.read().decode("utf-8", errors="ignore")
+    reader = csv_module.DictReader(io.StringIO(text))
+    added = 0
+    with db.connection() as conn:
+        for row in reader:
+            url = (row.get("url") or "").strip()
+            if not url:
+                continue
+            conn.execute(
+                "INSERT INTO form_targets (url, name, company) VALUES (?, ?, ?)",
+                (url, row.get("name"), row.get("company")),
+            )
+            added += 1
+    flash(f"Added {added} shop URL(s).")
+    return redirect(url_for("forms_page"))
+
+
+@app.route("/forms/run", methods=["POST"])
+def run_forms_route():
+    from playwright.sync_api import sync_playwright
+
+    sender_company = config.get_sender_company_name()
+    product_description = config.get_product_description()
+    api_key = config.get_deepseek_api_key()
+    reply_email = config.get_contact_reply_email()
+
+    with db.connection() as conn:
+        pending = conn.execute(
+            "SELECT * FROM form_targets WHERE status = 'pending' LIMIT 25"
+        ).fetchall()
+
+    if not pending:
+        flash("No pending shop URLs to crawl.")
+        return redirect(url_for("forms_page"))
+
+    submitted, needs_manual, failed = 0, 0, 0
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        for target in pending:
+            subject, body = generate_from_fields(
+                name=target["name"],
+                company=target["company"],
+                sender_company=sender_company,
+                product_description=product_description,
+                api_key=api_key,
+                prompt_template=config.get_prompt_template_override(),
+            )
+            result = crawl_target_headless(
+                browser,
+                url=target["url"],
+                name=target["name"],
+                company=target["company"],
+                sender_name=sender_company,
+                sender_email=reply_email,
+                subject=subject,
+                body=body,
+            )
+            with db.connection() as conn:
+                conn.execute(
+                    "UPDATE form_targets SET status = ?, contact_url = ?, "
+                    "subject = ?, body = ?, error = ?, updated_at = datetime('now') "
+                    "WHERE id = ?",
+                    (
+                        result["status"],
+                        result["contact_url"],
+                        subject,
+                        body,
+                        result["error"],
+                        target["id"],
+                    ),
+                )
+            submitted += result["status"] == "submitted"
+            needs_manual += result["status"] == "needs_manual"
+            failed += result["status"] == "failed"
+        browser.close()
+
+    flash(
+        f"Crawled {len(pending)}: {submitted} submitted, "
+        f"{needs_manual} need your manual input, {failed} failed."
+    )
+    return redirect(url_for("forms_page"))
+
+
 @app.route("/test", methods=["GET", "POST"])
 def test_page():
     result = None
@@ -192,6 +298,7 @@ def settings_page():
         db.set_setting("deepseek_api_key", request.form.get("deepseek_api_key", "").strip())
         db.set_setting("sender_company_name", request.form.get("sender_company_name", "").strip())
         db.set_setting("product_description", request.form.get("product_description", "").strip())
+        db.set_setting("contact_reply_email", request.form.get("contact_reply_email", "").strip())
         db.set_setting("daily_min_per_mailbox", request.form.get("daily_min_per_mailbox", "10").strip())
         db.set_setting("daily_max_per_mailbox", request.form.get("daily_max_per_mailbox", "15").strip())
         db.set_setting("send_window_start_hour", request.form.get("send_window_start_hour", "8").strip())
@@ -224,6 +331,7 @@ def settings_page():
         deepseek_api_key=config.get_deepseek_api_key() or "",
         sender_company_name=config.get_sender_company_name(),
         product_description=config.get_product_description(),
+        contact_reply_email=config.get_contact_reply_email(),
         daily_min=config.get_daily_min_per_mailbox(),
         daily_max=config.get_daily_max_per_mailbox(),
         window_start=config.get_send_window_start_hour(),

@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY email_pipeline/requirements.txt email_pipeline/requirements.txt
 RUN pip install --no-cache-dir -r email_pipeline/requirements.txt
+# installs Chromium + the OS libraries it needs, for the form-outreach crawler
+RUN playwright install --with-deps chromium
 
 COPY email_pipeline email_pipeline
 

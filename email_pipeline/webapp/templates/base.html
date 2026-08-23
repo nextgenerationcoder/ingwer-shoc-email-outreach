@@ -14,6 +14,7 @@
     <nav class="tabs">
       <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
       <a href="{{ url_for('contacts') }}" class="{{ 'active' if active=='contacts' else '' }}">Contacts</a>
+      <a href="{{ url_for('forms_page') }}" class="{{ 'active' if active=='forms' else '' }}">Form Outreach</a>
       <a href="{{ url_for('test_page') }}" class="{{ 'active' if active=='test' else '' }}">Test &amp; Preview</a>
       <a href="{{ url_for('prompt_page') }}" class="{{ 'active' if active=='prompt' else '' }}">AI Prompt</a>
       <a href="{{ url_for('settings_page') }}" class="{{ 'active' if active=='settings' else '' }}">Settings</a>

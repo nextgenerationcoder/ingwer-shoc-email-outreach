@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Contact-form outreach</h2>
+  <p class="muted">
+    No daily cap here -- unlike email, there's no mailbox reputation to
+    protect, so it just works through the list. Auto-submits when there's
+    no CAPTCHA; when there is one, it stops and gives you the contact
+    page link to finish yourself.
+  </p>
+  <div class="stat-row">
+    <div class="stat"><div class="num">{{ counts.get('pending', 0) }}</div><div class="lbl">Pending</div></div>
+    <div class="stat"><div class="num">{{ counts.get('submitted', 0) }}</div><div class="lbl">Submitted</div></div>
+    <div class="stat"><div class="num">{{ counts.get('needs_manual', 0) }}</div><div class="lbl">Needs you</div></div>
+    <div class="stat"><div class="num">{{ counts.get('failed', 0) }}</div><div class="lbl">Failed</div></div>
+  </div>
+  <form method="post" action="{{ url_for('run_forms_route') }}" style="margin-top:1rem">
+    <button type="submit">Run crawler (next 25 pending)</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Add shop URLs</h2>
+  <p class="muted">CSV with a <code>url</code> column (name, company optional).</p>
+  <form method="post" action="{{ url_for('import_forms_route') }}" enctype="multipart/form-data">
+    <input type="file" name="csv_file" accept=".csv" required>
+    <button type="submit">Import</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Targets <span class="muted">(most recent 300)</span></h2>
+  {% if targets %}
+  <table>
+    <tr><th>Shop</th><th>URL</th><th>Status</th><th>Action</th></tr>
+    {% for t in targets %}
+    <tr>
+      <td>{{ t['company'] or t['name'] or '-' }}</td>
+      <td><a href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url'] }}</a></td>
+      <td><span class="badge badge-{{ 'sent' if t['status']=='submitted' else ('pending' if t['status']=='needs_manual' else t['status']) }}">{{ t['status'] }}</span></td>
+      <td>
+        {% if t['status'] == 'needs_manual' and t['contact_url'] %}
+        <a href="{{ t['contact_url'] }}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin:0;padding:0.25rem 0.7rem;font-size:0.75rem">Open &amp; finish</a>
+        {% elif t['error'] %}
+        <span class="muted">{{ t['error'] }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No shop URLs yet -- import a CSV above.</p>
+  {% endif %}
+</div>
+{% endblock %}

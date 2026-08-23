@@ -58,3 +58,26 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- shop websites for the contact-form outreach feature (separate from
+-- the email contacts table -- no daily cap/scheduling here, since there's
+-- no mailbox-reputation reason to spread these out).
+CREATE TABLE IF NOT EXISTS form_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    name TEXT,
+    company TEXT,
+    -- pending: not yet crawled
+    -- submitted: form found and auto-submitted (no CAPTCHA blocked it)
+    -- needs_manual: a CAPTCHA was found -- the contact page URL is kept
+    --   so you can open it yourself and finish submitting by hand
+    -- failed: no contact form could be found/filled
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'submitted', 'needs_manual', 'failed')),
+    contact_url TEXT,
+    subject TEXT,
+    body TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT
+);
