@@ -9,10 +9,7 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path fill="#2c3c56" d="M52 12c6 0 9 6 8 12 5-3 12-1 13 6 1 6-4 10-9 11 6 2 10 8 8 14-2 7-10 9-16 6 2 6-2 13-9 14-7 1-12-5-12-11-4 4-11 4-15-1-4-5-2-12 3-15-6-1-10-7-9-13 1-6 7-10 13-9-3-5-1-12 5-14 3-1 6 0 8 2 0-6 4-12 12-12z"/>
-      </svg>
-      <span class="brand-text">Ingwer Shoc</span>
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="Ingwer Shoc" class="brand-logo">
     </div>
     <nav class="tabs">
       <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
