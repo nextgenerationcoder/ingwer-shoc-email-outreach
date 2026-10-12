@@ -26,6 +26,7 @@ from email_pipeline import config
 from email_pipeline.generate import generate_from_fields
 from email_pipeline.form_crawler import (
     find_contact_page,
+    find_best_form,
     fill_form,
     submit_form,
     has_captcha,
@@ -70,9 +71,15 @@ def run(targets_csv: str):
             page = browser.new_page()
             try:
                 page.goto(url, timeout=30000)
-                contact_url = find_contact_page(page, url)
-                if contact_url != url:
-                    page.goto(contact_url, timeout=30000)
+
+                # use the page you gave us directly if it already has a
+                # real contact form -- don't wander off to a "Kontakt"
+                # nav link that might point to a different page
+                form, _ = find_best_form(page)
+                if form is None:
+                    contact_url = find_contact_page(page, url)
+                    if contact_url != url:
+                        page.goto(contact_url, timeout=30000)
 
                 subject, body = generate_from_fields(
                     name=name,

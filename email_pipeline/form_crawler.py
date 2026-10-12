@@ -182,11 +182,20 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
     page = browser.new_page()
     try:
         page.goto(url, timeout=30000)
-        contact_url = find_contact_page(page, url)
-        if contact_url != url:
-            page.goto(contact_url, timeout=30000)
-        else:
+
+        # if the page we're already on has a real contact form, use it --
+        # don't go hunting for a "Kontakt" nav link that might point
+        # somewhere else (a different/legacy contact page) and wander
+        # away from the exact page you gave us.
+        form, _ = find_best_form(page)
+        if form is not None:
             contact_url = page.url
+        else:
+            contact_url = find_contact_page(page, url)
+            if contact_url != url:
+                page.goto(contact_url, timeout=30000)
+            else:
+                contact_url = page.url
 
         filled = fill_form(page, sender_name, sender_email, subject, body)
         if not filled:
