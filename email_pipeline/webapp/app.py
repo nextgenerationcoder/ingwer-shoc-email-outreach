@@ -149,6 +149,22 @@ def forms_page():
     return render_template("forms.html", active="forms", targets=rows, counts=counts)
 
 
+@app.route("/forms/add", methods=["POST"])
+def add_single_form_route():
+    url = request.form.get("url", "").strip()
+    if not url:
+        flash("Enter a URL.", "error")
+        return redirect(url_for("forms_page"))
+    with db.connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO form_targets (url, name, company) VALUES (?, ?, ?)",
+            (url, request.form.get("name", "").strip(), request.form.get("company", "").strip()),
+        )
+        target_id = cur.lastrowid
+    flash("Added -- click Preview to fill and review it.")
+    return redirect(url_for("forms_page"))
+
+
 @app.route("/forms/import", methods=["POST"])
 def import_forms_route():
     file = request.files.get("csv_file")
@@ -236,6 +252,125 @@ def run_forms_route():
         f"Crawled {len(pending)}: {submitted} submitted, "
         f"{needs_manual} need your manual input, {failed} failed."
     )
+    return redirect(url_for("forms_page"))
+
+
+@app.route("/forms/<int:target_id>/preview", methods=["POST"])
+def preview_form_route(target_id):
+    from playwright.sync_api import sync_playwright
+
+    with db.connection() as conn:
+        target = conn.execute(
+            "SELECT * FROM form_targets WHERE id = ?", (target_id,)
+        ).fetchone()
+    if not target:
+        flash("Target not found.", "error")
+        return redirect(url_for("forms_page"))
+
+    subject, body = generate_from_fields(
+        name=target["name"],
+        company=target["company"],
+        sender_company=config.get_sender_company_name(),
+        product_description=config.get_product_description(),
+        api_key=config.get_deepseek_api_key(),
+        prompt_template=config.get_prompt_template_override(),
+    )
+
+    screenshots_dir = os.path.join(os.path.dirname(__file__), "static", "screenshots")
+    os.makedirs(screenshots_dir, exist_ok=True)
+    screenshot_filename = f"{target_id}.png"
+    screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        result = crawl_target_headless(
+            browser,
+            url=target["url"],
+            name=target["name"],
+            company=target["company"],
+            sender_name=config.get_sender_company_name(),
+            sender_email=config.get_contact_reply_email(),
+            subject=subject,
+            body=body,
+            dry_run=True,
+            screenshot_path=screenshot_path,
+        )
+        browser.close()
+
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE form_targets SET status = ?, contact_url = ?, subject = ?, "
+            "body = ?, screenshot = ?, error = ?, updated_at = datetime('now') WHERE id = ?",
+            (
+                result["status"],
+                result["contact_url"],
+                subject,
+                body,
+                screenshot_filename if result["status"] == "pending_review" else None,
+                result["error"],
+                target_id,
+            ),
+        )
+
+    if result["status"] == "pending_review":
+        flash("Form filled -- review it below and approve to submit.")
+    elif result["status"] == "needs_manual":
+        flash("CAPTCHA found -- open the link to finish this one by hand.")
+    else:
+        flash(f"Couldn't fill a form: {result['error']}", "error")
+    return redirect(url_for("forms_page"))
+
+
+@app.route("/forms/<int:target_id>/approve", methods=["POST"])
+def approve_form_route(target_id):
+    from playwright.sync_api import sync_playwright
+
+    with db.connection() as conn:
+        target = conn.execute(
+            "SELECT * FROM form_targets WHERE id = ?", (target_id,)
+        ).fetchone()
+    if not target or target["status"] != "pending_review":
+        flash("Nothing pending approval for that target.", "error")
+        return redirect(url_for("forms_page"))
+
+    # re-fill with the SAME subject/body shown in the preview, then submit
+    # for real -- the browser tab from the preview can't be kept open
+    # across separate web requests, so the form is filled fresh here.
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        result = crawl_target_headless(
+            browser,
+            url=target["url"],
+            name=target["name"],
+            company=target["company"],
+            sender_name=config.get_sender_company_name(),
+            sender_email=config.get_contact_reply_email(),
+            subject=target["subject"],
+            body=target["body"],
+            dry_run=False,
+        )
+        browser.close()
+
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE form_targets SET status = ?, error = ?, updated_at = datetime('now') "
+            "WHERE id = ?",
+            (result["status"], result["error"], target_id),
+        )
+
+    flash("Submitted." if result["status"] == "submitted" else f"Submit failed: {result['error']}")
+    return redirect(url_for("forms_page"))
+
+
+@app.route("/forms/<int:target_id>/discard", methods=["POST"])
+def discard_form_route(target_id):
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE form_targets SET status = 'pending', screenshot = NULL "
+            "WHERE id = ? AND status = 'pending_review'",
+            (target_id,),
+        )
+    flash("Discarded -- back to pending.")
     return redirect(url_for("forms_page"))
 
 

@@ -109,11 +109,21 @@ def submit_form(page) -> bool:
 
 
 def crawl_target_headless(browser, url: str, name: str, company: str, sender_name: str,
-                           sender_email: str, subject: str, body: str) -> dict:
-    """Headless crawl for one shop: finds the contact form, fills it, and
-    auto-submits if there's no CAPTCHA. If there is one, stops short and
-    returns the contact page URL for you to finish by hand -- a server
-    process has no screen to solve a CAPTCHA on."""
+                           sender_email: str, subject: str, body: str,
+                           dry_run: bool = False, screenshot_path: str | None = None) -> dict:
+    """Headless crawl for one shop: finds the contact form and fills it.
+
+    dry_run=False (default): auto-submits if there's no CAPTCHA. If there
+    is one, stops short and returns the contact page URL for you to
+    finish by hand -- a server process has no screen to solve a CAPTCHA on.
+
+    dry_run=True: fills the form and takes a screenshot (if
+    screenshot_path is given) but never clicks submit -- returns
+    "pending_review" so the dashboard can show you the filled form before
+    you approve it. Call this function again with dry_run=False to
+    actually submit once you've approved it (the form gets filled fresh
+    each time rather than reusing a kept-open browser tab, since a
+    browser session can't be held open across separate web requests)."""
     page = browser.new_page()
     try:
         page.goto(url, timeout=30000)
@@ -127,8 +137,17 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         if not filled:
             return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found"}
 
+        if screenshot_path:
+            try:
+                page.screenshot(path=screenshot_path, full_page=True)
+            except Exception:
+                pass
+
         if has_captcha(page):
             return {"status": "needs_manual", "contact_url": contact_url, "error": None}
+
+        if dry_run:
+            return {"status": "pending_review", "contact_url": contact_url, "error": None}
 
         if submit_form(page):
             return {"status": "submitted", "contact_url": contact_url, "error": None}

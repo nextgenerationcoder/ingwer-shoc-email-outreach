@@ -68,15 +68,18 @@ CREATE TABLE IF NOT EXISTS form_targets (
     name TEXT,
     company TEXT,
     -- pending: not yet crawled
-    -- submitted: form found and auto-submitted (no CAPTCHA blocked it)
+    -- pending_review: form found, filled, and a screenshot taken -- waiting
+    --   for you to look it over and click Approve before it's submitted
+    -- submitted: form submitted (either auto, or after your approval)
     -- needs_manual: a CAPTCHA was found -- the contact page URL is kept
     --   so you can open it yourself and finish submitting by hand
     -- failed: no contact form could be found/filled
     status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'submitted', 'needs_manual', 'failed')),
+        CHECK (status IN ('pending', 'pending_review', 'submitted', 'needs_manual', 'failed')),
     contact_url TEXT,
     subject TEXT,
     body TEXT,
+    screenshot TEXT,
     error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT

@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 email_pipeline/pipeline.db
 email_pipeline/*.log
+email_pipeline/webapp/static/screenshots/

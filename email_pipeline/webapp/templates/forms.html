@@ -10,12 +10,31 @@
   </p>
   <div class="stat-row">
     <div class="stat"><div class="num">{{ counts.get('pending', 0) }}</div><div class="lbl">Pending</div></div>
+    <div class="stat"><div class="num">{{ counts.get('pending_review', 0) }}</div><div class="lbl">Awaiting approval</div></div>
     <div class="stat"><div class="num">{{ counts.get('submitted', 0) }}</div><div class="lbl">Submitted</div></div>
     <div class="stat"><div class="num">{{ counts.get('needs_manual', 0) }}</div><div class="lbl">Needs you</div></div>
     <div class="stat"><div class="num">{{ counts.get('failed', 0) }}</div><div class="lbl">Failed</div></div>
   </div>
   <form method="post" action="{{ url_for('run_forms_route') }}" style="margin-top:1rem">
-    <button type="submit">Run crawler (next 25 pending)</button>
+    <button type="submit">Run crawler, auto-submit (next 25 pending)</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Add one shop to preview</h2>
+  <p class="muted">Fills the form and shows you a screenshot first -- nothing is submitted until you click Approve.</p>
+  <form method="post" action="{{ url_for('add_single_form_route') }}">
+    <div class="grid-2">
+      <div>
+        <label>Shop website URL</label>
+        <input type="text" name="url" placeholder="https://example-shop.de" required>
+      </div>
+      <div>
+        <label>Shop / company name (optional)</label>
+        <input type="text" name="company" placeholder="Example Bio Laden">
+      </div>
+    </div>
+    <button type="submit">Add</button>
   </form>
 </div>
 
@@ -37,15 +56,41 @@
     <tr>
       <td>{{ t['company'] or t['name'] or '-' }}</td>
       <td><a href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url'] }}</a></td>
-      <td><span class="badge badge-{{ 'sent' if t['status']=='submitted' else ('pending' if t['status']=='needs_manual' else t['status']) }}">{{ t['status'] }}</span></td>
+      <td><span class="badge badge-{{ 'sent' if t['status']=='submitted' else ('pending' if t['status'] in ('needs_manual','pending_review') else t['status']) }}">{{ t['status'] }}</span></td>
       <td>
+        {% if t['status'] == 'pending' or t['status'] == 'failed' %}
+        <form method="post" action="{{ url_for('preview_form_route', target_id=t['id']) }}" style="display:inline">
+          <button type="submit" class="btn-secondary" style="margin:0;padding:0.25rem 0.7rem;font-size:0.75rem">Preview</button>
+        </form>
+        {% endif %}
         {% if t['status'] == 'needs_manual' and t['contact_url'] %}
         <a href="{{ t['contact_url'] }}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin:0;padding:0.25rem 0.7rem;font-size:0.75rem">Open &amp; finish</a>
-        {% elif t['error'] %}
+        {% endif %}
+        {% if t['status'] == 'failed' and t['error'] %}
         <span class="muted">{{ t['error'] }}</span>
         {% endif %}
       </td>
     </tr>
+    {% if t['status'] == 'pending_review' %}
+    <tr>
+      <td colspan="4">
+        <div class="preview-box">
+          <div class="subject">Filled form preview -- {{ t['contact_url'] }}</div>
+          {% if t['screenshot'] %}
+          <img src="{{ url_for('static', filename='screenshots/' + t['screenshot']) }}" alt="form preview screenshot" style="max-width:100%;border-radius:8px;border:1px solid var(--cream-dark);margin:0.5rem 0">
+          {% endif %}
+          <div class="subject">Subject: {{ t['subject'] }}</div>
+          <div>{{ t['body'] }}</div>
+          <form method="post" action="{{ url_for('approve_form_route', target_id=t['id']) }}" style="display:inline">
+            <button type="submit">Approve &amp; submit</button>
+          </form>
+          <form method="post" action="{{ url_for('discard_form_route', target_id=t['id']) }}" style="display:inline">
+            <button type="submit" class="btn-secondary">Discard</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endif %}
     {% endfor %}
   </table>
   {% else %}
