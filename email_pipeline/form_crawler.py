@@ -51,9 +51,18 @@ def classify_field(name: str, field_id: str, placeholder: str, label: str) -> st
 
 
 def has_captcha(page) -> bool:
+    """True only if a CAPTCHA is actually visible to a human. Many sites
+    (Shopify included) embed an invisible reCAPTCHA v3 badge purely for
+    background spam scoring, with no challenge ever shown to the user --
+    that shouldn't block an otherwise-normal auto-submit."""
     for selector in CAPTCHA_SELECTORS:
-        if page.locator(selector).count() > 0:
-            return True
+        locator = page.locator(selector)
+        for i in range(locator.count()):
+            try:
+                if locator.nth(i).is_visible():
+                    return True
+            except Exception:
+                continue
     return False
 
 
