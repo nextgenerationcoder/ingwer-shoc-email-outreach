@@ -14,8 +14,9 @@ then open http://localhost:5000
 import io
 import os
 import csv as csv_module
+from functools import wraps
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 
 from .. import config, db
 from ..assign import assign_mailbox
@@ -39,6 +40,138 @@ start_scheduler()
 @app.before_request
 def ensure_db():
     db.init_db()
+
+
+@app.after_request
+def add_cors_headers(response):
+    # the Chrome extension's popup/content scripts call /api/* from a
+    # chrome-extension:// origin, which needs an explicit CORS allow
+    if request.path.startswith("/api/"):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+@app.route("/api/<path:_any>", methods=["OPTIONS"])
+def api_options(_any):
+    return "", 204
+
+
+def require_api_key(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if request.headers.get("X-API-Key") != config.get_extension_api_key():
+            return jsonify({"error": "invalid or missing X-API-Key"}), 401
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+@app.route("/api/forms/pending")
+@require_api_key
+def api_forms_pending():
+    limit = min(int(request.args.get("limit", 20)), 100)
+    with db.connection() as conn:
+        rows = conn.execute(
+            "SELECT id, url, name, company FROM form_targets "
+            "WHERE status = 'pending' ORDER BY id LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/forms/by_url")
+@require_api_key
+def api_forms_by_url():
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "missing url query param"}), 400
+    # match by domain, not exact URL, since the extension reports the
+    # page you're actually on (e.g. /pages/contact) which may differ
+    # from the stored target URL (e.g. the shop's homepage)
+    try:
+        domain = url.split("://", 1)[-1].split("/", 1)[0].removeprefix("www.")
+    except Exception:
+        domain = url
+    with db.connection() as conn:
+        rows = conn.execute(
+            "SELECT id, url, name, company, status FROM form_targets "
+            "WHERE url LIKE ? ORDER BY id",
+            (f"%{domain}%",),
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/forms/<int:target_id>/generate", methods=["POST"])
+@require_api_key
+def api_generate(target_id):
+    with db.connection() as conn:
+        target = conn.execute(
+            "SELECT * FROM form_targets WHERE id = ?", (target_id,)
+        ).fetchone()
+    if not target:
+        return jsonify({"error": "not found"}), 404
+
+    subject, body = generate_from_fields(
+        name=target["name"],
+        company=target["company"],
+        sender_company=config.get_sender_company_name(),
+        product_description=config.get_product_description(),
+        api_key=config.get_deepseek_api_key(),
+        prompt_template=config.get_prompt_template_override(),
+    )
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE form_targets SET subject = ?, body = ?, updated_at = datetime('now') WHERE id = ?",
+            (subject, body, target_id),
+        )
+    return jsonify({
+        "id": target_id,
+        "subject": subject,
+        "body": body,
+        "sender_name": config.get_sender_company_name(),
+        "sender_email": config.get_contact_reply_email(),
+    })
+
+
+@app.route("/api/forms/<int:target_id>/submitted", methods=["POST"])
+@require_api_key
+def api_mark_submitted(target_id):
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE form_targets SET status = 'submitted', updated_at = datetime('now') WHERE id = ?",
+            (target_id,),
+        )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/forms/<int:target_id>/skip", methods=["POST"])
+@require_api_key
+def api_mark_skip(target_id):
+    reason = (request.get_json(silent=True) or {}).get("reason", "skipped from extension")
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE form_targets SET status = 'failed', error = ?, updated_at = datetime('now') WHERE id = ?",
+            (reason, target_id),
+        )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/forms", methods=["POST"])
+@require_api_key
+def api_add_target():
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "missing url"}), 400
+    with db.connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO form_targets (url, name, company) VALUES (?, ?, ?)",
+            (url, data.get("name", "").strip(), data.get("company", "").strip()),
+        )
+        target_id = cur.lastrowid
+    return jsonify({"id": target_id})
 
 
 @app.route("/")
@@ -471,6 +604,7 @@ def settings_page():
         daily_max=config.get_daily_max_per_mailbox(),
         window_start=config.get_send_window_start_hour(),
         window_end=config.get_send_window_end_hour(),
+        extension_api_key=config.get_extension_api_key(),
     )
 
 

@@ -27,6 +27,7 @@ Plus:
 """
 import json
 import os
+import secrets
 from dataclasses import dataclass
 
 # DB_PATH can't itself live in the DB (chicken-and-egg), so it stays
@@ -102,6 +103,20 @@ def get_prompt_template_override():
     from . import db
 
     return db.get_setting("prompt_template")
+
+
+def get_extension_api_key() -> str:
+    """Shared-secret key the Chrome extension sends as X-API-Key to the
+    /api/* routes. Generated once on first use and stored, so there's
+    nothing to configure manually -- just copy it from Settings into the
+    extension's options page."""
+    from . import db
+
+    key = db.get_setting("extension_api_key")
+    if not key:
+        key = secrets.token_hex(24)
+        db.set_setting("extension_api_key", key)
+    return key
 
 
 def load_mailboxes() -> list[Mailbox]:

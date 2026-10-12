@@ -79,4 +79,11 @@
 
   <button type="submit">Save settings</button>
 </form>
+
+<div class="card">
+  <h2>Chrome extension</h2>
+  <p class="muted">Paste this into the extension's options page (right-click its icon &rarr; Options) along with this site's web address.</p>
+  <label>Extension API key</label>
+  <input type="text" value="{{ extension_api_key }}" readonly onclick="this.select()">
+</div>
 {% endblock %}
