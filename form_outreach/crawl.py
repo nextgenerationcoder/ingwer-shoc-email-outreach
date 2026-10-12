@@ -30,6 +30,7 @@ from email_pipeline.form_crawler import (
     fill_form,
     submit_form,
     has_captcha,
+    dismiss_cookie_banner,
 )
 
 
@@ -71,6 +72,7 @@ def run(targets_csv: str):
             page = browser.new_page()
             try:
                 page.goto(url, timeout=30000)
+                dismiss_cookie_banner(page)
 
                 # use the page you gave us directly if it already has a
                 # real contact form -- don't wander off to a "Kontakt"

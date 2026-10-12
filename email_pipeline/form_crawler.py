@@ -46,6 +46,31 @@ def find_contact_page(page, base_url: str) -> str:
     return base_url
 
 
+COOKIE_ACCEPT_TEXTS = [
+    "Alle akzeptieren", "Akzeptieren", "Alle Cookies akzeptieren", "Zustimmen",
+    "Accept all", "Accept All", "Accept All Cookies", "I Accept", "Accept",
+    "Alles akzeptieren", "OK", "Got it", "Verstanden",
+]
+
+
+def dismiss_cookie_banner(page) -> bool:
+    """Best-effort: click an "accept" button on a cookie-consent banner if
+    one is showing. Purely cosmetic for the preview screenshot -- fill()
+    already uses force=True so it works whether or not this succeeds --
+    but a banner sitting over the form makes the preview hard to read."""
+    for text in COOKIE_ACCEPT_TEXTS:
+        try:
+            button = page.get_by_role("button", name=text, exact=False).first
+            if button.count() == 0 or not button.is_visible():
+                continue
+            button.click(timeout=2000)
+            page.wait_for_timeout(300)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def classify_field(name: str, field_id: str, placeholder: str, label: str) -> str | None:
     signal = " ".join(filter(None, [name, field_id, placeholder, label])).lower()
     for category, keywords in FIELD_KEYWORDS.items():
@@ -179,6 +204,7 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
     page = browser.new_page()
     try:
         page.goto(url, timeout=30000)
+        dismiss_cookie_banner(page)
 
         # if the page we're already on has a real contact form, use it --
         # don't go hunting for a "Kontakt" nav link that might point
