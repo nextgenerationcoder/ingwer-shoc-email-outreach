@@ -58,9 +58,9 @@
       <td><a href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url'] }}</a></td>
       <td><span class="badge badge-{{ 'sent' if t['status']=='submitted' else ('pending' if t['status'] in ('needs_manual','pending_review') else t['status']) }}">{{ t['status'] }}</span></td>
       <td>
-        {% if t['status'] == 'pending' or t['status'] == 'failed' %}
+        {% if t['status'] in ('pending', 'failed', 'needs_manual') %}
         <form method="post" action="{{ url_for('preview_form_route', target_id=t['id']) }}" style="display:inline">
-          <button type="submit" class="btn-secondary" style="margin:0;padding:0.25rem 0.7rem;font-size:0.75rem">Preview</button>
+          <button type="submit" class="btn-secondary" style="margin:0;padding:0.25rem 0.7rem;font-size:0.75rem">{{ 'Preview' if t['status'] == 'pending' else 'Preview again' }}</button>
         </form>
         {% endif %}
         {% if t['status'] == 'needs_manual' and t['contact_url'] %}
