@@ -10,12 +10,16 @@ Shared contact-form crawling logic. Used two ways:
 import re
 
 CAPTCHA_SELECTORS = [
-    'iframe[src*="recaptcha"]',
-    'iframe[src*="hcaptcha"]',
+    # the actual v2 "I'm not a robot" challenge iframe -- Google titles it
+    # exactly "reCAPTCHA"; deliberately NOT matching on iframe src alone,
+    # since the harmless, always-visible reCAPTCHA v3 corner badge (which
+    # never needs solving) is also served from a recaptcha.google.com
+    # iframe and would otherwise cause a false "needs you" on every site
+    # that merely has background bot-scoring installed.
+    'iframe[title="reCAPTCHA"]',
+    'iframe[src*="hcaptcha.com/captcha"]',
     'div.g-recaptcha',
     'div.h-captcha',
-    '[class*="captcha" i]',
-    '[id*="captcha" i]',
 ]
 
 CONTACT_LINK_PATTERN = re.compile(
