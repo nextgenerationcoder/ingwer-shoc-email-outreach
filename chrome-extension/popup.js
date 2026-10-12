@@ -20,6 +20,38 @@ function render(html) {
   document.getElementById("content").innerHTML = html;
 }
 
+function waitForTabComplete(tabId, timeoutMs = 20000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }, timeoutMs);
+    function listener(id, changeInfo) {
+      if (id === tabId && changeInfo.status === "complete") {
+        done = true;
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+async function fillCurrentTab(tabId, fields) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["fill-logic.js"] });
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (f) => fillContactFormOnPage(f),
+    args: [fields],
+  });
+  return result;
+}
+
 async function main() {
   const { baseUrl, apiKey } = await chrome.storage.sync.get(["baseUrl", "apiKey"]);
   if (!baseUrl || !apiKey) {
@@ -28,32 +60,49 @@ async function main() {
     return;
   }
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.url || !tab.url.startsWith("http")) {
-    render(`<p class="muted">Open a shop's contact page first.</p>`);
+  const session = await chrome.storage.session.get(["batch"]);
+  if (session.batch && session.batch.queue.length > session.batch.index) {
+    renderBatchItem(baseUrl, apiKey, session.batch);
     return;
   }
 
-  render(`<p class="muted">Looking up ${new URL(tab.url).hostname}...</p>`);
+  renderSinglePageMode(baseUrl, apiKey);
+}
+
+// ---- single-page mode: fill whatever contact page the current tab is on ----
+
+async function renderSinglePageMode(baseUrl, apiKey) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  render(`
+    <button id="startBatch">Start batch (go through pending list)</button>
+    <hr style="margin:0.8rem 0;border:none;border-top:1px solid #ece8b0">
+    <div id="singlePage"><p class="muted">Loading current page...</p></div>
+  `);
+  document.getElementById("startBatch").addEventListener("click", () => startBatch(baseUrl, apiKey));
+
+  if (!tab || !tab.url || !tab.url.startsWith("http")) {
+    document.getElementById("singlePage").innerHTML = `<p class="muted">Open a shop's contact page to fill it individually.</p>`;
+    return;
+  }
 
   let matches;
   try {
     matches = await apiFetch(baseUrl, apiKey, `/api/forms/by_url?url=${encodeURIComponent(tab.url)}`);
   } catch (err) {
-    render(`<p class="muted">Could not reach dashboard.</p>`);
+    document.getElementById("singlePage").innerHTML = `<p class="muted">Could not reach dashboard.</p>`;
     setStatus(err.message, false);
     return;
   }
 
   const pending = matches.find((m) => m.status === "pending") || matches.find((m) => m.status !== "submitted");
-
   if (!pending) {
-    render(`
+    document.getElementById("singlePage").innerHTML = `
       <p class="muted">No target on file for this site yet.</p>
       <label>Company / shop name (optional)</label>
       <input id="companyName">
       <button id="addTarget">Add this page</button>
-    `);
+    `;
     document.getElementById("addTarget").addEventListener("click", async () => {
       try {
         const company = document.getElementById("companyName").value;
@@ -61,7 +110,7 @@ async function main() {
           method: "POST",
           body: JSON.stringify({ url: tab.url, company }),
         });
-        showTarget(baseUrl, apiKey, tab, { id: added.id, url: tab.url, company });
+        showSingleTarget(baseUrl, apiKey, tab.id, { id: added.id, url: tab.url, company });
       } catch (err) {
         setStatus(err.message, false);
       }
@@ -69,24 +118,36 @@ async function main() {
     return;
   }
 
-  showTarget(baseUrl, apiKey, tab, pending);
+  showSingleTarget(baseUrl, apiKey, tab.id, pending);
 }
 
-function showTarget(baseUrl, apiKey, tab, target) {
-  render(`
-    <div class="card">
-      <strong>${target.company || target.name || target.url}</strong>
-      <div class="muted">${target.url}</div>
-    </div>
+function showSingleTarget(baseUrl, apiKey, tabId, target) {
+  document.getElementById("singlePage").innerHTML = `
+    <div class="card"><strong>${target.company || target.name || target.url}</strong><div class="muted">${target.url}</div></div>
     <button id="generate">Generate text</button>
     <div id="preview"></div>
-  `);
-
+  `;
   document.getElementById("generate").addEventListener("click", async () => {
     setStatus("Generating...", true);
     try {
       const gen = await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/generate`, { method: "POST" });
-      showPreview(baseUrl, apiKey, tab, target, gen);
+      renderPreviewForm(document.getElementById("preview"), gen, {
+        onFill: async (fields) => {
+          const result = await fillCurrentTab(tabId, fields);
+          return result;
+        },
+        onSubmitted: async () => {
+          await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/submitted`, { method: "POST" });
+          render(`<p class="muted">Marked submitted.</p>`);
+        },
+        onSkip: async () => {
+          await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/skip`, {
+            method: "POST",
+            body: JSON.stringify({ reason: "skipped from extension" }),
+          });
+          render(`<p class="muted">Skipped.</p>`);
+        },
+      });
       setStatus("", true);
     } catch (err) {
       setStatus(err.message, false);
@@ -94,67 +155,180 @@ function showTarget(baseUrl, apiKey, tab, target) {
   });
 }
 
-function showPreview(baseUrl, apiKey, tab, target, gen) {
-  document.getElementById("preview").innerHTML = `
+// ---- batch mode: walk the pending list, navigating the tab for you ----
+
+async function startBatch(baseUrl, apiKey) {
+  setStatus("Loading pending list...", true);
+  try {
+    const queue = await apiFetch(baseUrl, apiKey, "/api/forms/pending?limit=50");
+    if (queue.length === 0) {
+      setStatus("No pending targets.", false);
+      return;
+    }
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const batch = { queue, index: 0, tabId: tab.id };
+    await chrome.storage.session.set({ batch });
+    await goToBatchItem(baseUrl, apiKey, batch);
+  } catch (err) {
+    setStatus(err.message, false);
+  }
+}
+
+async function goToBatchItem(baseUrl, apiKey, batch) {
+  const target = batch.queue[batch.index];
+  render(`<p class="muted">Opening ${target.company || target.url} (${batch.index + 1} of ${batch.queue.length})...</p>`);
+
+  await chrome.tabs.update(batch.tabId, { url: target.url });
+  await waitForTabComplete(batch.tabId);
+
+  let gen;
+  try {
+    gen = await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/generate`, { method: "POST" });
+  } catch (err) {
+    setStatus(err.message, false);
+    return;
+  }
+
+  let fillResult;
+  try {
+    fillResult = await fillCurrentTab(batch.tabId, {
+      name: gen.sender_name,
+      email: gen.sender_email,
+      subject: gen.subject,
+      message: gen.body,
+    });
+  } catch (err) {
+    fillResult = { ok: false, error: err.message };
+  }
+
+  renderBatchItem(baseUrl, apiKey, batch, gen, fillResult);
+}
+
+function renderBatchItem(baseUrl, apiKey, batch, gen, fillResult) {
+  const target = batch.queue[batch.index];
+  render(`
+    <div class="card">
+      <strong>${target.company || target.url}</strong>
+      <div class="muted">${batch.index + 1} of ${batch.queue.length}</div>
+    </div>
+    <div id="fillStatus" class="muted"></div>
+    <div id="preview"></div>
+  `);
+
+  const fillStatusEl = document.getElementById("fillStatus");
+  if (fillResult) {
+    fillStatusEl.textContent = fillResult.ok
+      ? `Filled ${fillResult.filledCount} field(s) -- solve any CAPTCHA and click Submit on the page, then come back here.`
+      : `Could not fill: ${fillResult.error}`;
+  }
+
+  if (!gen) {
+    // reopened popup mid-batch without a fresh generation -- just offer next/skip
+    document.getElementById("preview").innerHTML = `
+      <button id="nextBtn">Submitted -- next</button>
+      <button id="skipBtn" class="secondary">Skip -- next</button>
+      <button id="stopBtn" class="secondary">Stop batch</button>
+    `;
+  } else {
+    renderPreviewForm(document.getElementById("preview"), gen, {
+      showFillButton: true,
+      onFill: (fields) => fillCurrentTab(batch.tabId, fields),
+      onSubmitted: () => advanceBatch(baseUrl, apiKey, batch, "submitted"),
+      onSkip: () => advanceBatch(baseUrl, apiKey, batch, "skip"),
+    });
+    const extra = document.createElement("div");
+    extra.innerHTML = `<button id="stopBtn" class="secondary">Stop batch</button>`;
+    document.getElementById("preview").appendChild(extra);
+  }
+
+  const stopBtn = document.getElementById("stopBtn");
+  if (stopBtn) stopBtn.addEventListener("click", async () => {
+    await chrome.storage.session.remove("batch");
+    render(`<p class="muted">Batch stopped.</p>`);
+  });
+
+  const nextBtn = document.getElementById("nextBtn");
+  if (nextBtn) nextBtn.addEventListener("click", () => advanceBatch(baseUrl, apiKey, batch, "submitted"));
+  const skipBtn = document.getElementById("skipBtn");
+  if (skipBtn) skipBtn.addEventListener("click", () => advanceBatch(baseUrl, apiKey, batch, "skip"));
+}
+
+async function advanceBatch(baseUrl, apiKey, batch, outcome) {
+  const target = batch.queue[batch.index];
+  try {
+    if (outcome === "submitted") {
+      await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/submitted`, { method: "POST" });
+    } else {
+      await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/skip`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "skipped from extension" }),
+      });
+    }
+  } catch (err) {
+    setStatus(err.message, false);
+    return;
+  }
+
+  batch.index += 1;
+  await chrome.storage.session.set({ batch });
+
+  if (batch.index >= batch.queue.length) {
+    await chrome.storage.session.remove("batch");
+    render(`<p class="muted">Batch complete -- ${batch.queue.length} target(s) processed.</p>`);
+    return;
+  }
+
+  await goToBatchItem(baseUrl, apiKey, batch);
+}
+
+// ---- shared preview/edit form used by both modes ----
+
+function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
+  container.innerHTML = `
     <label>Sender name</label>
     <input id="f_name" value="${gen.sender_name || ""}">
     <label>Sender email</label>
     <input id="f_email" value="${gen.sender_email || ""}">
     <label>Subject</label>
-    <input id="f_subject" value="${gen.subject.replace(/"/g, "&quot;")}">
+    <input id="f_subject" value="${(gen.subject || "").replace(/"/g, "&quot;")}">
     <label>Message</label>
-    <textarea id="f_message">${gen.body}</textarea>
+    <textarea id="f_message">${gen.body || ""}</textarea>
     <button id="fillBtn">Fill form on page</button>
-    <button id="submittedBtn" class="secondary" disabled>Mark submitted</button>
-    <button id="skipBtn" class="secondary">Skip</button>
+    <button id="submittedBtn" class="secondary" disabled>Submitted -- next</button>
+    <button id="skipBtn" class="secondary">Skip -- next</button>
   `;
 
-  document.getElementById("fillBtn").addEventListener("click", async () => {
+  container.querySelector("#fillBtn").addEventListener("click", async () => {
     setStatus("Filling...", true);
     try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["fill-logic.js"],
+      const result = await onFill({
+        name: document.getElementById("f_name").value,
+        email: document.getElementById("f_email").value,
+        subject: document.getElementById("f_subject").value,
+        message: document.getElementById("f_message").value,
       });
-      const [{ result: fillResult }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (fields) => fillContactFormOnPage(fields),
-        args: [{
-          name: document.getElementById("f_name").value,
-          email: document.getElementById("f_email").value,
-          subject: document.getElementById("f_subject").value,
-          message: document.getElementById("f_message").value,
-        }],
-      });
-      if (fillResult.ok) {
-        setStatus(`Filled ${fillResult.filledCount} field(s) -- review on the page, then submit it yourself.`, true);
-        document.getElementById("submittedBtn").disabled = false;
+      if (result.ok) {
+        setStatus(`Filled ${result.filledCount} field(s) -- review, solve any CAPTCHA, submit yourself.`, true);
+        container.querySelector("#submittedBtn").disabled = false;
       } else {
-        setStatus(fillResult.error, false);
+        setStatus(result.error, false);
       }
     } catch (err) {
       setStatus(err.message, false);
     }
   });
 
-  document.getElementById("submittedBtn").addEventListener("click", async () => {
+  container.querySelector("#submittedBtn").addEventListener("click", async () => {
     try {
-      await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/submitted`, { method: "POST" });
-      setStatus("Marked submitted.", true);
-      render(`<p class="muted">Done -- close this popup or move to the next site.</p>`);
+      await onSubmitted();
     } catch (err) {
       setStatus(err.message, false);
     }
   });
 
-  document.getElementById("skipBtn").addEventListener("click", async () => {
+  container.querySelector("#skipBtn").addEventListener("click", async () => {
     try {
-      await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/skip`, {
-        method: "POST",
-        body: JSON.stringify({ reason: "skipped from extension" }),
-      });
-      setStatus("Skipped.", true);
-      render(`<p class="muted">Skipped.</p>`);
+      await onSkip();
     } catch (err) {
       setStatus(err.message, false);
     }

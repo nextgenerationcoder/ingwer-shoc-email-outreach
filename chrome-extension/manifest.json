@@ -3,7 +3,7 @@
   "name": "Ingwer Shoc Form Outreach",
   "version": "1.0.0",
   "description": "Fill contact forms using your own browser (dodges bot-detection/CAPTCHA), submit them yourself -- syncs with the Form Outreach dashboard.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html"

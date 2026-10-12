@@ -30,25 +30,38 @@ look it over and click Submit yourself.
 
 ## Use
 
+**Batch mode** (the main flow -- works through your whole pending list):
+
+1. Click the extension icon, then **Start batch**
+2. It navigates your current tab to the first pending shop, auto-generates
+   the text, and auto-fills the form
+3. Review it, solve any CAPTCHA, click Submit yourself on the page
+   (this closes the popup -- that's normal)
+4. Click the extension icon again -- it remembers where it was and shows
+   **Submitted -- next** / **Skip -- next** / **Stop batch**
+5. Click **Submitted -- next**: it marks that one done, navigates to the
+   next shop, and auto-fills it. Repeat from step 3.
+
+**Single-page mode** (for one site at a time, not working through a list):
+
 1. Navigate to a shop's contact page in a normal tab
 2. Click the extension icon -- it looks up whether that site already
    has a target on file (matched by domain); if not, you can add it
    on the spot
-3. Click **Generate text** -- same AI prompt as the rest of the
-   pipeline, editable before filling
-4. Click **Fill form on page** -- fills the real form in your actual
-   tab (filled fields get a green outline so you can see what changed)
-5. Review it, solve any CAPTCHA, click Submit yourself on the page
-6. Back in the popup, click **Mark submitted** (or **Skip** if it
-   didn't work out) to record the result on the dashboard
+3. Click **Generate text**, review/edit it, then **Fill form on page**
+4. Review it, solve any CAPTCHA, click Submit yourself on the page
+5. Back in the popup, click **Submitted -- next** (or **Skip**)
 
 ## Files
 
 - `manifest.json` -- Manifest V3 config
-- `popup.html` / `popup.js` -- the main UI
+- `popup.html` / `popup.js` -- the main UI; handles both batch mode
+  (walks the pending list, driving tab navigation itself via
+  `chrome.tabs.update` + `chrome.storage.session` to remember where it
+  is across popup open/close) and single-page mode
 - `options.html` / `options.js` -- dashboard URL + API key setup
 - `fill-logic.js` -- the field-detection/fill logic, injected into the
   page on demand. Deliberately mirrors
   `email_pipeline/form_crawler.py`'s `classify_field`/`find_best_form`/
-  `fill_form` so a form is filled the same way whether the server
-  crawler or this extension does it.
+  `fill_form` (including the cookie-banner dismiss) so a form is filled
+  the same way whether the server crawler or this extension does it.
