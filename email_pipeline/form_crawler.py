@@ -26,7 +26,7 @@ FIELD_KEYWORDS = {
     "email": ["email", "mail", "e-mail"],
     "name": ["name", "vorname", "firstname"],
     "subject": ["subject", "betreff", "topic", "reason"],
-    "message": ["message", "nachricht", "comment", "anliegen", "inquiry"],
+    "message": ["message", "nachricht", "comment", "anliegen", "inquiry", "body", "frage"],
 }
 
 
@@ -57,14 +57,10 @@ def has_captcha(page) -> bool:
     return False
 
 
-def fill_form(page, sender_name: str, sender_email: str, subject: str, body: str) -> bool:
-    """Fills any recognized fields in the page's first form. Returns
-    whether at least one field was filled."""
-    form = page.locator("form").first
-    if form.count() == 0:
-        return False
-
-    filled_any = False
+def _classify_fields_in(form) -> list[tuple]:
+    """Returns [(field_locator, category), ...] for every recognizable
+    field inside the given form locator."""
+    matches = []
     inputs = form.locator("input, textarea, select")
     for i in range(inputs.count()):
         field = inputs.nth(i)
@@ -77,20 +73,68 @@ def fill_form(page, sender_name: str, sender_email: str, subject: str, body: str
             placeholder = field.get_attribute("placeholder") or ""
             label_text = ""
             if field_id:
-                label = page.locator(f'label[for="{field_id}"]')
+                label = field.page.locator(f'label[for="{field_id}"]')
                 if label.count() > 0:
                     label_text = label.first.inner_text()
 
             category = classify_field(name, field_id, placeholder, label_text)
-            value = {
-                "email": sender_email,
-                "name": sender_name,
-                "subject": subject,
-                "message": body,
-            }.get(category)
-            if value:
-                field.fill(value)
-                filled_any = True
+            if category:
+                matches.append((field, category))
+        except Exception:
+            continue
+    return matches
+
+
+def find_best_form(page):
+    """A real page often has more than one <form> -- a header search box,
+    a newsletter signup, a cart form -- before the actual contact form.
+    Picking the first one on the page silently fills/submits the wrong
+    thing (or finds nothing to fill and gives up). Score every form by
+    how many recognizable fields it has and pick the best one, requiring
+    at least an email or message field so a lone search/newsletter form
+    never wins.
+
+    Returns (form_locator, [(field_locator, category), ...]) or
+    (None, []) if nothing on the page looks like a contact form."""
+    forms = page.locator("form")
+    best_form, best_matches = None, []
+    for i in range(forms.count()):
+        form = forms.nth(i)
+        matches = _classify_fields_in(form)
+        categories = {cat for _, cat in matches}
+        if "email" not in categories and "message" not in categories:
+            continue
+        if len(matches) > len(best_matches):
+            best_form, best_matches = form, matches
+    return best_form, best_matches
+
+
+def fill_form(page, sender_name: str, sender_email: str, subject: str, body: str) -> bool:
+    """Finds the best-matching form on the page (see find_best_form) and
+    fills its recognized fields. Returns whether at least one field was
+    filled."""
+    form, matches = find_best_form(page)
+    if form is None:
+        return False
+
+    values = {
+        "email": sender_email,
+        "name": sender_name,
+        "subject": subject,
+        "message": body,
+    }
+    filled_any = False
+    for field, category in matches:
+        value = values.get(category)
+        if not value:
+            continue
+        try:
+            # force=True: skip Playwright's actionability/overlay check --
+            # cookie-consent banners and sticky headers commonly sit over
+            # a form without actually blocking it, and failing silently
+            # there is worse than a slightly-too-permissive fill.
+            field.fill(value, force=True)
+            filled_any = True
         except Exception:
             continue
 
@@ -98,13 +142,15 @@ def fill_form(page, sender_name: str, sender_email: str, subject: str, body: str
 
 
 def submit_form(page) -> bool:
-    form = page.locator("form").first
+    form, _ = find_best_form(page)
+    if form is None:
+        return False
     submit_button = form.locator('button[type="submit"], input[type="submit"]').first
     if submit_button.count() == 0:
         submit_button = form.locator("button").first
     if submit_button.count() == 0:
         return False
-    submit_button.click()
+    submit_button.click(force=True)
     return True
 
 
