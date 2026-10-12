@@ -33,8 +33,8 @@ from email_pipeline.form_crawler import (
 )
 
 
-def fill_and_submit(page, sender_name: str, sender_email: str, subject: str, body: str) -> bool:
-    filled = fill_form(page, sender_name, sender_email, subject, body)
+def fill_and_submit(page, form, matches, sender_name: str, sender_email: str, subject: str, body: str) -> bool:
+    filled = fill_form(form, matches, sender_name, sender_email, subject, body)
     if not filled:
         return False
 
@@ -47,7 +47,7 @@ def fill_and_submit(page, sender_name: str, sender_email: str, subject: str, bod
             print("  Timed out waiting -- moving on (submit it manually if you still want to).")
         return True
 
-    return submit_form(page)
+    return submit_form(form)
 
 
 def run(targets_csv: str):
@@ -75,11 +75,18 @@ def run(targets_csv: str):
                 # use the page you gave us directly if it already has a
                 # real contact form -- don't wander off to a "Kontakt"
                 # nav link that might point to a different page
-                form, _ = find_best_form(page)
+                form, matches = find_best_form(page)
                 if form is None:
                     contact_url = find_contact_page(page, url)
                     if contact_url != url:
                         page.goto(contact_url, timeout=30000)
+                        form, matches = find_best_form(page)
+
+                if form is None:
+                    print("  could not find/fill a form -- skipping")
+                    page.close()
+                    time.sleep(random.uniform(5, 15))
+                    continue
 
                 subject, body = generate_from_fields(
                     name=name,
@@ -91,6 +98,8 @@ def run(targets_csv: str):
 
                 ok = fill_and_submit(
                     page,
+                    form,
+                    matches,
                     sender_name=sender_company,
                     sender_email=reply_email,
                     subject=subject,

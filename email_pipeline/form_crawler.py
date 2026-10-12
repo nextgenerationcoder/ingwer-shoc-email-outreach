@@ -122,14 +122,10 @@ def find_best_form(page):
     return best_form, best_matches
 
 
-def fill_form(page, sender_name: str, sender_email: str, subject: str, body: str) -> bool:
-    """Finds the best-matching form on the page (see find_best_form) and
-    fills its recognized fields. Returns whether at least one field was
-    filled."""
-    form, matches = find_best_form(page)
-    if form is None:
-        return False
-
+def fill_form(form, matches: list[tuple], sender_name: str, sender_email: str,
+              subject: str, body: str) -> bool:
+    """Fills the recognized fields found by find_best_form. Returns
+    whether at least one field was filled."""
     values = {
         "email": sender_email,
         "name": sender_name,
@@ -154,10 +150,7 @@ def fill_form(page, sender_name: str, sender_email: str, subject: str, body: str
     return filled_any
 
 
-def submit_form(page) -> bool:
-    form, _ = find_best_form(page)
-    if form is None:
-        return False
+def submit_form(form) -> bool:
     submit_button = form.locator('button[type="submit"], input[type="submit"]').first
     if submit_button.count() == 0:
         submit_button = form.locator("button").first
@@ -191,25 +184,35 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         # don't go hunting for a "Kontakt" nav link that might point
         # somewhere else (a different/legacy contact page) and wander
         # away from the exact page you gave us.
-        form, _ = find_best_form(page)
+        form, matches = find_best_form(page)
         if form is not None:
             contact_url = page.url
         else:
             contact_url = find_contact_page(page, url)
             if contact_url != url:
                 page.goto(contact_url, timeout=30000)
+                form, matches = find_best_form(page)
             else:
                 contact_url = page.url
 
-        filled = fill_form(page, sender_name, sender_email, subject, body)
+        if form is None:
+            return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found"}
+
+        filled = fill_form(form, matches, sender_name, sender_email, subject, body)
         if not filled:
             return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found"}
 
         if screenshot_path:
             try:
-                page.screenshot(path=screenshot_path, full_page=True)
+                # scoped to just the form itself, not the whole (often very
+                # long) page -- this is what you actually need to see to
+                # approve it
+                form.screenshot(path=screenshot_path)
             except Exception:
-                pass
+                try:
+                    page.screenshot(path=screenshot_path, full_page=True)
+                except Exception:
+                    pass
 
         if has_captcha(page):
             return {"status": "needs_manual", "contact_url": contact_url, "error": None}
@@ -217,7 +220,7 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         if dry_run:
             return {"status": "pending_review", "contact_url": contact_url, "error": None}
 
-        if submit_form(page):
+        if submit_form(form):
             return {"status": "submitted", "contact_url": contact_url, "error": None}
         return {"status": "failed", "contact_url": contact_url, "error": "no submit button found"}
     except Exception as exc:
