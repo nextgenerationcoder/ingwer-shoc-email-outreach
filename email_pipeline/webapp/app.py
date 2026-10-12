@@ -557,6 +557,7 @@ def prompt_page():
         active="prompt",
         prompt=current,
         is_default=not config.get_prompt_template_override(),
+        has_api_key=bool(config.get_deepseek_api_key()),
     )
 
 

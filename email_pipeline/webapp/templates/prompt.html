@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
+{% if not has_api_key %}
+<div class="flash flash-error">
+  No DeepSeek API key is set in <a href="{{ url_for('settings_page') }}">Settings</a> --
+  until you add one, this prompt is <strong>ignored entirely</strong> and every email
+  uses a fixed generic fallback template instead, no matter what you write here.
+</div>
+{% endif %}
 <div class="card">
   <h2>AI prompt</h2>
   <p class="muted">
