@@ -30,6 +30,7 @@ FIELD_KEYWORDS = {
     "email": ["email", "mail", "e-mail"],
     "name": ["name", "vorname", "firstname"],
     "phone": ["phone", "telefon", "mobile", "handy", "fax"],
+    "address": ["address", "adresse", "strasse", "straße", "anschrift", "plz", "postleitzahl", "postal"],
     "subject": ["subject", "betreff", "topic", "reason"],
     "message": ["message", "nachricht", "comment", "anliegen", "inquiry", "body", "frage"],
 }
@@ -173,13 +174,15 @@ def find_best_form(page):
 
 
 def fill_form(form, matches: list[tuple], sender_name: str, sender_email: str,
-              subject: str, body: str, sender_phone: str = "") -> bool:
+              subject: str, body: str, sender_phone: str = "",
+              sender_address: str = "") -> bool:
     """Fills the recognized fields found by find_best_form. Returns
     whether at least one field was filled."""
     values = {
         "email": sender_email,
         "name": sender_name,
         "phone": sender_phone,
+        "address": sender_address,
         "subject": subject,
         "message": body,
     }
@@ -213,7 +216,7 @@ def submit_form(form) -> bool:
 
 def crawl_target_headless(browser, url: str, name: str, company: str, sender_name: str,
                            sender_email: str, subject: str, body: str,
-                           sender_phone: str = "",
+                           sender_phone: str = "", sender_address: str = "",
                            dry_run: bool = False, screenshot_path: str | None = None) -> dict:
     """Headless crawl for one shop: finds the contact form and fills it.
 
@@ -251,7 +254,7 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         if form is None:
             return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found", "unmatched_fields": []}
 
-        filled = fill_form(form, matches, sender_name, sender_email, subject, body, sender_phone)
+        filled = fill_form(form, matches, sender_name, sender_email, subject, body, sender_phone, sender_address)
         if not filled:
             return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found", "unmatched_fields": unmatched}
 

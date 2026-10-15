@@ -134,6 +134,7 @@ def api_generate(target_id):
         "sender_name": config.get_sender_company_name(),
         "sender_email": config.get_contact_reply_email(),
         "sender_phone": config.get_contact_phone(),
+        "sender_address": config.get_contact_address(),
     })
 
 
@@ -341,6 +342,7 @@ def run_forms_route():
     api_key = config.get_deepseek_api_key()
     reply_email = config.get_contact_reply_email()
     reply_phone = config.get_contact_phone()
+    reply_address = config.get_contact_address()
 
     with db.connection() as conn:
         pending = conn.execute(
@@ -371,6 +373,7 @@ def run_forms_route():
                 sender_name=sender_company,
                 sender_email=reply_email,
                 sender_phone=reply_phone,
+                sender_address=reply_address,
                 subject=subject,
                 body=body,
             )
@@ -437,6 +440,7 @@ def preview_form_route(target_id):
             sender_name=config.get_sender_company_name(),
             sender_email=config.get_contact_reply_email(),
             sender_phone=config.get_contact_phone(),
+            sender_address=config.get_contact_address(),
             subject=subject,
             body=body,
             dry_run=True,
@@ -495,6 +499,7 @@ def approve_form_route(target_id):
             sender_name=config.get_sender_company_name(),
             sender_email=config.get_contact_reply_email(),
             sender_phone=config.get_contact_phone(),
+            sender_address=config.get_contact_address(),
             subject=target["subject"],
             body=target["body"],
             dry_run=False,
@@ -619,6 +624,7 @@ def settings_page():
         db.set_setting("product_description", request.form.get("product_description", "").strip())
         db.set_setting("contact_reply_email", request.form.get("contact_reply_email", "").strip())
         db.set_setting("contact_phone", request.form.get("contact_phone", "").strip())
+        db.set_setting("contact_address", request.form.get("contact_address", "").strip())
         db.set_setting("daily_min_per_mailbox", request.form.get("daily_min_per_mailbox", "10").strip())
         db.set_setting("daily_max_per_mailbox", request.form.get("daily_max_per_mailbox", "15").strip())
         db.set_setting("send_window_start_hour", request.form.get("send_window_start_hour", "8").strip())
@@ -653,6 +659,7 @@ def settings_page():
         product_description=config.get_product_description(),
         contact_reply_email=config.get_contact_reply_email(),
         contact_phone=config.get_contact_phone(),
+        contact_address=config.get_contact_address(),
         daily_min=config.get_daily_min_per_mailbox(),
         daily_max=config.get_daily_max_per_mailbox(),
         window_start=config.get_send_window_start_hour(),

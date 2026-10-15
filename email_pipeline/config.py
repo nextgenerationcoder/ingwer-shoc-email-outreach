@@ -89,6 +89,12 @@ def get_contact_phone() -> str:
     return _setting("contact_phone", "CONTACT_PHONE", "")
 
 
+def get_contact_address() -> str:
+    """The postal address put into contact-form 'address' fields, if
+    present. Left blank by default -- address fields are skipped entirely
+    when this isn't set."""
+    return _setting("contact_address", "CONTACT_ADDRESS", "")
+
 
 def get_daily_min_per_mailbox() -> int:
     return int(_setting("daily_min_per_mailbox", "DAILY_MIN_PER_MAILBOX", "10"))

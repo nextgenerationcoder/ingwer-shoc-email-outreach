@@ -291,6 +291,8 @@ function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
     <input id="f_email" value="${gen.sender_email || ""}">
     <label>Sender phone (optional)</label>
     <input id="f_phone" value="${gen.sender_phone || ""}">
+    <label>Sender address (optional)</label>
+    <input id="f_address" value="${gen.sender_address || ""}">
     <label>Subject</label>
     <input id="f_subject" value="${(gen.subject || "").replace(/"/g, "&quot;")}">
     <label>Message</label>
@@ -308,6 +310,7 @@ function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
         name: document.getElementById("f_name").value,
         email: document.getElementById("f_email").value,
         phone: document.getElementById("f_phone").value,
+        address: document.getElementById("f_address").value,
         subject: document.getElementById("f_subject").value,
         message: document.getElementById("f_message").value,
       });

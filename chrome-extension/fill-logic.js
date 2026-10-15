@@ -12,6 +12,7 @@ function fillContactFormOnPage(fields) {
     email: ["email", "mail", "e-mail"],
     name: ["name", "vorname", "firstname"],
     phone: ["phone", "telefon", "mobile", "handy", "fax"],
+    address: ["address", "adresse", "strasse", "straße", "anschrift", "plz", "postleitzahl", "postal"],
     subject: ["subject", "betreff", "topic", "reason"],
     message: ["message", "nachricht", "comment", "anliegen", "inquiry", "body", "frage"],
   };
@@ -134,6 +135,7 @@ function fillContactFormOnPage(fields) {
     email: fields.email,
     name: fields.name,
     phone: fields.phone,
+    address: fields.address,
     subject: fields.subject,
     message: fields.message,
   };
