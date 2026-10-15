@@ -15,8 +15,11 @@
     <div class="stat"><div class="num">{{ counts.get('needs_manual', 0) }}</div><div class="lbl">Needs you</div></div>
     <div class="stat"><div class="num">{{ counts.get('failed', 0) }}</div><div class="lbl">Failed</div></div>
   </div>
-  <form method="post" action="{{ url_for('run_forms_route') }}" style="margin-top:1rem">
+  <form method="post" action="{{ url_for('run_forms_route') }}" style="margin-top:1rem; display:inline">
     <button type="submit">Run crawler, auto-submit (next 25 pending)</button>
+  </form>
+  <form method="post" action="{{ url_for('delete_pending_forms_route') }}" style="margin-top:1rem; display:inline" onsubmit="return confirm('Remove all pending/failed targets from the list?')">
+    <button type="submit" class="btn-secondary">Remove all pending &amp; failed</button>
   </form>
 </div>
 
@@ -75,6 +78,9 @@
           {% for f in t['unmatched_fields'] %}{{ f.label or f.placeholder or f.name or f.id or '?' }}{% if not loop.last %}, {% endif %}{% endfor %}
         </div>
         {% endif %}
+        <form method="post" action="{{ url_for('delete_form_route', target_id=t['id']) }}" style="display:inline" onsubmit="return confirm('Remove this target from the list?')">
+          <button type="submit" class="btn-secondary" style="margin:0;padding:0.25rem 0.7rem;font-size:0.75rem">Remove</button>
+        </form>
       </td>
     </tr>
     {% if t['status'] == 'pending_review' %}
@@ -101,6 +107,9 @@
           </form>
           <form method="post" action="{{ url_for('discard_form_route', target_id=t['id']) }}" style="display:inline">
             <button type="submit" class="btn-secondary">Discard</button>
+          </form>
+          <form method="post" action="{{ url_for('delete_form_route', target_id=t['id']) }}" style="display:inline" onsubmit="return confirm('Remove this target from the list?')">
+            <button type="submit" class="btn-secondary">Remove</button>
           </form>
         </div>
       </td>

@@ -524,6 +524,39 @@ def discard_form_route(target_id):
     return redirect(url_for("forms_page"))
 
 
+def _delete_form_target(conn, target_id):
+    row = conn.execute("SELECT screenshot FROM form_targets WHERE id = ?", (target_id,)).fetchone()
+    if row and row["screenshot"]:
+        screenshot_path = os.path.join(
+            os.path.dirname(__file__), "static", "screenshots", row["screenshot"]
+        )
+        try:
+            os.remove(screenshot_path)
+        except OSError:
+            pass
+    conn.execute("DELETE FROM form_targets WHERE id = ?", (target_id,))
+
+
+@app.route("/forms/<int:target_id>/delete", methods=["POST"])
+def delete_form_route(target_id):
+    with db.connection() as conn:
+        _delete_form_target(conn, target_id)
+    flash("Removed from the list.")
+    return redirect(url_for("forms_page"))
+
+
+@app.route("/forms/delete_pending", methods=["POST"])
+def delete_pending_forms_route():
+    with db.connection() as conn:
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM form_targets WHERE status IN ('pending', 'failed')"
+        ).fetchall()]
+        for target_id in ids:
+            _delete_form_target(conn, target_id)
+    flash(f"Removed {len(ids)} pending target(s).")
+    return redirect(url_for("forms_page"))
+
+
 @app.route("/test", methods=["GET", "POST"])
 def test_page():
     result = None
