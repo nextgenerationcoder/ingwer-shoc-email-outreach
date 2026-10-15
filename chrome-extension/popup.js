@@ -319,10 +319,15 @@ function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
         container.querySelector("#submittedBtn").disabled = false;
         const unmatched = result.unmatchedFields || [];
         const noteEl = container.querySelector("#unmatchedNote");
-        if (noteEl && unmatched.length > 0) {
-          const names = unmatched.map((f) => f.label || f.placeholder || f.name || f.id || "?");
-          noteEl.textContent = `${unmatched.length} field(s) not filled: ${names.join(", ")} -- tell Claude about these if you want support added.`;
+        const notes = [];
+        if (result.captchaDetected) {
+          notes.push("CAPTCHA detected on this page -- solve it by hand before submitting; some browsers also autofill other fields with saved data after this script runs, so double-check every field before you click submit.");
         }
+        if (unmatched.length > 0) {
+          const names = unmatched.map((f) => f.label || f.placeholder || f.name || f.id || "?");
+          notes.push(`${unmatched.length} field(s) not filled: ${names.join(", ")} -- tell Claude about these if you want support added.`);
+        }
+        if (noteEl) noteEl.textContent = notes.join(" ");
       } else {
         setStatus(result.error, false);
       }

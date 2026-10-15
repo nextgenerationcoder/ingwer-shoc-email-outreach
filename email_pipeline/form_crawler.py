@@ -20,6 +20,23 @@ CAPTCHA_SELECTORS = [
     'iframe[src*="hcaptcha.com/captcha"]',
     'div.g-recaptcha',
     'div.h-captcha',
+    # plenty of German sites (pharmacies especially) roll their own
+    # text-in-the-image CAPTCHA instead of Google/hCaptcha -- none of the
+    # selectors above catch those, so match the image itself too.
+    'img[src*="captcha" i]',
+    'img[alt*="captcha" i]',
+]
+
+# a custom text CAPTCHA's *input* field (where you type what the image
+# shows) rarely has "captcha" in its name/id -- it's the label/instruction
+# text next to it that gives it away. Any field whose label/placeholder
+# matches one of these must never be auto-filled or silently skipped as
+# "just another unmatched field" -- it means the form can't be auto-submitted
+# at all, no matter how many other fields filled in fine.
+CAPTCHA_FIELD_KEYWORDS = [
+    "captcha", "sicherheitscode", "sicherheitsabfrage", "zeichenfolge",
+    "prüfcode", "pruefcode", "tragen sie", "rechenaufgabe", "spamschutz",
+    "code eingeben", "schutzcode",
 ]
 
 CONTACT_LINK_PATTERN = re.compile(
@@ -94,6 +111,17 @@ def has_captcha(page) -> bool:
                     return True
             except Exception:
                 continue
+
+    # fallback for a custom text-in-image CAPTCHA whose image file isn't
+    # literally named "captcha" -- e.g. "Tragen Sie folgenden Text ein:"
+    # next to a distorted-text image. Catch the instruction text itself.
+    for keyword in CAPTCHA_FIELD_KEYWORDS:
+        try:
+            locator = page.get_by_text(keyword, exact=False).first
+            if locator.count() > 0 and locator.is_visible():
+                return True
+        except Exception:
+            continue
     return False
 
 

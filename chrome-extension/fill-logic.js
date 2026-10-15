@@ -23,6 +23,28 @@ function fillContactFormOnPage(fields) {
     "alles akzeptieren", "ok", "got it", "verstanden",
   ];
 
+  // a custom text-in-image CAPTCHA (common on German pharmacy/medical
+  // sites) isn't Google reCAPTCHA or hCaptcha, so it has no dedicated
+  // widget to detect -- catch it via the image or its instruction text.
+  const CAPTCHA_KEYWORDS = [
+    "captcha", "sicherheitscode", "sicherheitsabfrage", "zeichenfolge",
+    "prüfcode", "pruefcode", "tragen sie", "rechenaufgabe", "spamschutz",
+    "code eingeben", "schutzcode",
+  ];
+
+  function hasCaptcha(form) {
+    const images = Array.from(document.querySelectorAll("img"));
+    if (images.some((img) => {
+      const src = (img.getAttribute("src") || "").toLowerCase();
+      const alt = (img.getAttribute("alt") || "").toLowerCase();
+      return isVisible(img) && (src.includes("captcha") || alt.includes("captcha"));
+    })) {
+      return true;
+    }
+    const text = document.body.innerText.toLowerCase();
+    return CAPTCHA_KEYWORDS.some((kw) => text.includes(kw));
+  }
+
   function classify(name, id, placeholder, label) {
     const signal = [name, id, placeholder, label].filter(Boolean).join(" ").toLowerCase();
     for (const [category, keywords] of Object.entries(FIELD_KEYWORDS)) {
@@ -158,5 +180,5 @@ function fillContactFormOnPage(fields) {
   }
 
   form.scrollIntoView({ behavior: "smooth", block: "center" });
-  return { ok: true, filledCount, unmatchedFields: unmatched };
+  return { ok: true, filledCount, unmatchedFields: unmatched, captchaDetected: hasCaptcha(form) };
 }
