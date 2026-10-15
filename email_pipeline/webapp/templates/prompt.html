@@ -21,8 +21,9 @@
     </div>
   </form>
   <p class="muted" style="margin-top:1rem">
-    Use <code>{name}</code>, <code>{company}</code>, <code>{sender_company}</code>, <code>{product_description}</code> as placeholders --
-    they get filled in per contact. Try changes on the <a href="{{ url_for('test_page') }}">Test &amp; Preview</a> page before running live.
+    Use <code>{name}</code>, <code>{company}</code>, <code>{sender_company}</code>, <code>{product_description}</code>, <code>{website}</code> as placeholders --
+    they get filled in per contact (<code>{website}</code> is only set for contact-form outreach, blank for regular email). Any other
+    <code>{placeholder}</code> is left as-is rather than causing an error. Try changes on the <a href="{{ url_for('test_page') }}">Test &amp; Preview</a> page before running live.
   </p>
 </div>
 {% endblock %}

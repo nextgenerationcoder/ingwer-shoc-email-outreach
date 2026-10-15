@@ -65,6 +65,18 @@ def _fallback_text(name: str, company: str, sender_company: str, product_descrip
     return subject, body
 
 
+class _SafePlaceholders(dict):
+    """A custom prompt can reference a placeholder we don't know about
+    (typo, or one that only makes sense for a different flow, like
+    {website} when there's no shop URL in this context). Rather than
+    crashing the whole page with a 500 on every generate/preview call,
+    leave an unrecognized {placeholder} in the text untouched so it's
+    obviously still a placeholder rather than silently vanishing."""
+
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
 def generate_from_fields(
     name: str,
     company: str,
@@ -72,6 +84,7 @@ def generate_from_fields(
     product_description: str,
     api_key: str | None,
     prompt_template: str | None = None,
+    website: str = "",
 ) -> tuple[str, str]:
     """Core generation logic, independent of the contacts DB -- used both
     by the real pipeline and by the UI's test/preview page."""
@@ -84,12 +97,15 @@ def generate_from_fields(
     import openai
 
     client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-    prompt = (prompt_template or DEFAULT_PROMPT_TEMPLATE).format(
+    placeholders = _SafePlaceholders(
         name=name,
         company=company,
         sender_company=sender_company,
         product_description=product_description,
+        website=website,
+        url=website,
     )
+    prompt = (prompt_template or DEFAULT_PROMPT_TEMPLATE).format_map(placeholders)
     response = client.chat.completions.create(
         model="deepseek-chat",
         max_tokens=400,

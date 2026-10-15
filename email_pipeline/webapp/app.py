@@ -121,6 +121,7 @@ def api_generate(target_id):
         product_description=config.get_product_description(),
         api_key=config.get_deepseek_api_key(),
         prompt_template=config.get_prompt_template_override(),
+        website=target["url"],
     )
     with db.connection() as conn:
         conn.execute(
@@ -364,6 +365,7 @@ def run_forms_route():
                 product_description=product_description,
                 api_key=api_key,
                 prompt_template=config.get_prompt_template_override(),
+                website=target["url"],
             )
             result = crawl_target_headless(
                 browser,
@@ -423,6 +425,7 @@ def preview_form_route(target_id):
         product_description=config.get_product_description(),
         api_key=config.get_deepseek_api_key(),
         prompt_template=config.get_prompt_template_override(),
+        website=target["url"],
     )
 
     screenshots_dir = os.path.join(os.path.dirname(__file__), "static", "screenshots")
