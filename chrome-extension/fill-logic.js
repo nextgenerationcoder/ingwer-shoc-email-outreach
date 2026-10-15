@@ -45,8 +45,18 @@ function fillContactFormOnPage(fields) {
     return CAPTCHA_KEYWORDS.some((kw) => text.includes(kw));
   }
 
+  function innermostName(name) {
+    // many sites namespace every field under one array-style wrapper, e.g.
+    // name="mail[name]" -- the wrapper ("mail") isn't the field's own
+    // identity and would make every field in the form look like whatever
+    // category the wrapper word happens to match. Classify by the
+    // innermost bracket content instead.
+    const brackets = [...name.matchAll(/\[([^\[\]]+)\]/g)];
+    return brackets.length > 0 ? brackets[brackets.length - 1][1] : name;
+  }
+
   function classify(name, id, placeholder, label) {
-    const signal = [name, id, placeholder, label].filter(Boolean).join(" ").toLowerCase();
+    const signal = [innermostName(name), id, placeholder, label].filter(Boolean).join(" ").toLowerCase();
     for (const [category, keywords] of Object.entries(FIELD_KEYWORDS)) {
       if (keywords.some((kw) => signal.includes(kw))) return category;
     }

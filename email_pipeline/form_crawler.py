@@ -90,8 +90,20 @@ def dismiss_cookie_banner(page) -> bool:
     return False
 
 
+def _innermost_name(name: str) -> str:
+    """Many sites namespace every field under one array-style wrapper,
+    e.g. name="mail[name]", name="contact[Email]" -- the wrapper itself
+    (here "mail", which contains the substring "mail") isn't the field's
+    own identity. Using the raw name for keyword matching makes every
+    field in such a form look like whatever category the wrapper word
+    happens to match -- classify by the innermost bracket content
+    instead, which is the part that actually names this specific field."""
+    brackets = re.findall(r"\[([^\[\]]+)\]", name)
+    return brackets[-1] if brackets else name
+
+
 def classify_field(name: str, field_id: str, placeholder: str, label: str) -> str | None:
-    signal = " ".join(filter(None, [name, field_id, placeholder, label])).lower()
+    signal = " ".join(filter(None, [_innermost_name(name), field_id, placeholder, label])).lower()
     for category, keywords in FIELD_KEYWORDS.items():
         if any(kw in signal for kw in keywords):
             return category
