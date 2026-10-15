@@ -11,6 +11,7 @@ function fillContactFormOnPage(fields) {
   const FIELD_KEYWORDS = {
     email: ["email", "mail", "e-mail"],
     name: ["name", "vorname", "firstname"],
+    phone: ["phone", "telefon", "mobile", "handy", "fax"],
     subject: ["subject", "betreff", "topic", "reason"],
     message: ["message", "nachricht", "comment", "anliegen", "inquiry", "body", "frage"],
   };
@@ -62,34 +63,54 @@ function fillContactFormOnPage(fields) {
 
   function classifyFieldsIn(form) {
     const matches = [];
+    const unmatched = [];
     const inputs = form.querySelectorAll("input, textarea, select");
     for (const field of inputs) {
       const type = (field.getAttribute("type") || "text").toLowerCase();
-      if (["submit", "button", "hidden", "checkbox", "radio"].includes(type)) continue;
-      const category = classify(
-        field.getAttribute("name") || "",
-        field.getAttribute("id") || "",
-        field.getAttribute("placeholder") || "",
-        labelTextFor(field.getAttribute("id"))
-      );
-      if (category) matches.push({ field, category });
+      if (["submit", "button", "hidden"].includes(type)) continue;
+      const name = field.getAttribute("name") || "";
+      const id = field.getAttribute("id") || "";
+      const placeholder = field.getAttribute("placeholder") || "";
+      const label = labelTextFor(id);
+
+      if (["checkbox", "radio"].includes(type)) {
+        unmatched.push({ name, id, placeholder, label, type });
+        continue;
+      }
+
+      if (field.tagName === "SELECT") {
+        // a dropdown needs the right option picked, not text typed in --
+        // out of scope for keyword-based filling, report it instead of
+        // silently attempting (and failing) to set a value
+        unmatched.push({ name, id, placeholder, label, type: "select" });
+        continue;
+      }
+
+      const category = classify(name, id, placeholder, label);
+      if (category) {
+        matches.push({ field, category });
+      } else {
+        unmatched.push({ name, id, placeholder, label, type });
+      }
     }
-    return matches;
+    return { matches, unmatched };
   }
 
   function findBestForm() {
     let best = null;
     let bestMatches = [];
+    let bestUnmatched = [];
     for (const form of document.querySelectorAll("form")) {
-      const matches = classifyFieldsIn(form);
+      const { matches, unmatched } = classifyFieldsIn(form);
       const categories = new Set(matches.map((m) => m.category));
       if (!categories.has("email") && !categories.has("message")) continue;
       if (matches.length > bestMatches.length) {
         best = form;
         bestMatches = matches;
+        bestUnmatched = unmatched;
       }
     }
-    return { form: best, matches: bestMatches };
+    return { form: best, matches: bestMatches, unmatched: bestUnmatched };
   }
 
   // setting .value directly doesn't notify React/Vue-controlled inputs --
@@ -104,7 +125,7 @@ function fillContactFormOnPage(fields) {
 
   dismissCookieBanner();
 
-  const { form, matches } = findBestForm();
+  const { form, matches, unmatched } = findBestForm();
   if (!form) {
     return { ok: false, error: "no contact form found on this page" };
   }
@@ -112,6 +133,7 @@ function fillContactFormOnPage(fields) {
   const values = {
     email: fields.email,
     name: fields.name,
+    phone: fields.phone,
     subject: fields.subject,
     message: fields.message,
   };
@@ -134,5 +156,5 @@ function fillContactFormOnPage(fields) {
   }
 
   form.scrollIntoView({ behavior: "smooth", block: "center" });
-  return { ok: true, filledCount };
+  return { ok: true, filledCount, unmatchedFields: unmatched };
 }

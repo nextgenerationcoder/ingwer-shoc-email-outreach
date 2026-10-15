@@ -12,6 +12,7 @@ Run with:
 then open http://localhost:5000
 """
 import io
+import json
 import os
 import csv as csv_module
 from functools import wraps
@@ -132,6 +133,7 @@ def api_generate(target_id):
         "body": body,
         "sender_name": config.get_sender_company_name(),
         "sender_email": config.get_contact_reply_email(),
+        "sender_phone": config.get_contact_phone(),
     })
 
 
@@ -279,7 +281,15 @@ def forms_page():
                 "SELECT status, COUNT(*) c FROM form_targets GROUP BY status"
             ).fetchall()
         }
-    return render_template("forms.html", active="forms", targets=rows, counts=counts)
+    targets = []
+    for r in rows:
+        t = dict(r)
+        try:
+            t["unmatched_fields"] = json.loads(t.get("unmatched_fields") or "[]")
+        except (TypeError, ValueError):
+            t["unmatched_fields"] = []
+        targets.append(t)
+    return render_template("forms.html", active="forms", targets=targets, counts=counts)
 
 
 @app.route("/forms/add", methods=["POST"])
@@ -330,6 +340,7 @@ def run_forms_route():
     product_description = config.get_product_description()
     api_key = config.get_deepseek_api_key()
     reply_email = config.get_contact_reply_email()
+    reply_phone = config.get_contact_phone()
 
     with db.connection() as conn:
         pending = conn.execute(
@@ -359,20 +370,22 @@ def run_forms_route():
                 company=target["company"],
                 sender_name=sender_company,
                 sender_email=reply_email,
+                sender_phone=reply_phone,
                 subject=subject,
                 body=body,
             )
             with db.connection() as conn:
                 conn.execute(
                     "UPDATE form_targets SET status = ?, contact_url = ?, "
-                    "subject = ?, body = ?, error = ?, updated_at = datetime('now') "
-                    "WHERE id = ?",
+                    "subject = ?, body = ?, error = ?, unmatched_fields = ?, "
+                    "updated_at = datetime('now') WHERE id = ?",
                     (
                         result["status"],
                         result["contact_url"],
                         subject,
                         body,
                         result["error"],
+                        json.dumps(result.get("unmatched_fields", [])),
                         target["id"],
                     ),
                 )
@@ -423,6 +436,7 @@ def preview_form_route(target_id):
             company=target["company"],
             sender_name=config.get_sender_company_name(),
             sender_email=config.get_contact_reply_email(),
+            sender_phone=config.get_contact_phone(),
             subject=subject,
             body=body,
             dry_run=True,
@@ -433,7 +447,8 @@ def preview_form_route(target_id):
     with db.connection() as conn:
         conn.execute(
             "UPDATE form_targets SET status = ?, contact_url = ?, subject = ?, "
-            "body = ?, screenshot = ?, error = ?, updated_at = datetime('now') WHERE id = ?",
+            "body = ?, screenshot = ?, error = ?, unmatched_fields = ?, "
+            "updated_at = datetime('now') WHERE id = ?",
             (
                 result["status"],
                 result["contact_url"],
@@ -441,6 +456,7 @@ def preview_form_route(target_id):
                 body,
                 screenshot_filename if result["status"] == "pending_review" else None,
                 result["error"],
+                json.dumps(result.get("unmatched_fields", [])),
                 target_id,
             ),
         )
@@ -478,6 +494,7 @@ def approve_form_route(target_id):
             company=target["company"],
             sender_name=config.get_sender_company_name(),
             sender_email=config.get_contact_reply_email(),
+            sender_phone=config.get_contact_phone(),
             subject=target["subject"],
             body=target["body"],
             dry_run=False,
@@ -568,6 +585,7 @@ def settings_page():
         db.set_setting("sender_company_name", request.form.get("sender_company_name", "").strip())
         db.set_setting("product_description", request.form.get("product_description", "").strip())
         db.set_setting("contact_reply_email", request.form.get("contact_reply_email", "").strip())
+        db.set_setting("contact_phone", request.form.get("contact_phone", "").strip())
         db.set_setting("daily_min_per_mailbox", request.form.get("daily_min_per_mailbox", "10").strip())
         db.set_setting("daily_max_per_mailbox", request.form.get("daily_max_per_mailbox", "15").strip())
         db.set_setting("send_window_start_hour", request.form.get("send_window_start_hour", "8").strip())
@@ -601,6 +619,7 @@ def settings_page():
         sender_company_name=config.get_sender_company_name(),
         product_description=config.get_product_description(),
         contact_reply_email=config.get_contact_reply_email(),
+        contact_phone=config.get_contact_phone(),
         daily_min=config.get_daily_min_per_mailbox(),
         daily_max=config.get_daily_max_per_mailbox(),
         window_start=config.get_send_window_start_hour(),

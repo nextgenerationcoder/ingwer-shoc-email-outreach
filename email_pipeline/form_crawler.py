@@ -29,6 +29,7 @@ CONTACT_LINK_PATTERN = re.compile(
 FIELD_KEYWORDS = {
     "email": ["email", "mail", "e-mail"],
     "name": ["name", "vorname", "firstname"],
+    "phone": ["phone", "telefon", "mobile", "handy", "fax"],
     "subject": ["subject", "betreff", "topic", "reason"],
     "message": ["message", "nachricht", "comment", "anliegen", "inquiry", "body", "frage"],
 }
@@ -95,16 +96,23 @@ def has_captcha(page) -> bool:
     return False
 
 
-def _classify_fields_in(form) -> list[tuple]:
-    """Returns [(field_locator, category), ...] for every recognizable
-    field inside the given form locator."""
+def _classify_fields_in(form) -> tuple[list[tuple], list[dict]]:
+    """Returns (matches, unmatched) for every input/textarea/select inside
+    the given form locator. matches is [(field_locator, category), ...]
+    for fields we know how to fill; unmatched is
+    [{"name", "id", "placeholder", "label"}, ...] for every field we
+    could NOT classify -- so you can see what's being silently skipped
+    (e.g. a "Firma"/company field, a dropdown, a date picker) instead of
+    it just staying blank with no indication why."""
     matches = []
+    unmatched = []
     inputs = form.locator("input, textarea, select")
     for i in range(inputs.count()):
         field = inputs.nth(i)
         try:
+            tag = (field.evaluate("el => el.tagName") or "").lower()
             field_type = (field.get_attribute("type") or "text").lower()
-            if field_type in ("submit", "button", "hidden", "checkbox", "radio"):
+            if field_type in ("submit", "button", "hidden"):
                 continue
             name = field.get_attribute("name") or ""
             field_id = field.get_attribute("id") or ""
@@ -115,12 +123,28 @@ def _classify_fields_in(form) -> list[tuple]:
                 if label.count() > 0:
                     label_text = label.first.inner_text()
 
+            if field_type in ("checkbox", "radio"):
+                # usually consent/opt-in toggles, not something we'd want
+                # to auto-tick -- note them but never auto-fill/check
+                unmatched.append({"name": name, "id": field_id, "placeholder": placeholder, "label": label_text, "type": field_type})
+                continue
+
+            if tag == "select":
+                # a dropdown needs select_option() with the right choice
+                # picked, not fill() with arbitrary text -- out of scope
+                # for keyword-based text filling, so always report it
+                # rather than silently attempting (and failing) a fill()
+                unmatched.append({"name": name, "id": field_id, "placeholder": placeholder, "label": label_text, "type": "select"})
+                continue
+
             category = classify_field(name, field_id, placeholder, label_text)
             if category:
                 matches.append((field, category))
+            else:
+                unmatched.append({"name": name, "id": field_id, "placeholder": placeholder, "label": label_text, "type": field_type})
         except Exception:
             continue
-    return matches
+    return matches, unmatched
 
 
 def find_best_form(page):
@@ -132,28 +156,30 @@ def find_best_form(page):
     at least an email or message field so a lone search/newsletter form
     never wins.
 
-    Returns (form_locator, [(field_locator, category), ...]) or
-    (None, []) if nothing on the page looks like a contact form."""
+    Returns (form_locator, [(field_locator, category), ...], [unmatched
+    field dicts]) or (None, [], []) if nothing on the page looks like a
+    contact form."""
     forms = page.locator("form")
-    best_form, best_matches = None, []
+    best_form, best_matches, best_unmatched = None, [], []
     for i in range(forms.count()):
         form = forms.nth(i)
-        matches = _classify_fields_in(form)
+        matches, unmatched = _classify_fields_in(form)
         categories = {cat for _, cat in matches}
         if "email" not in categories and "message" not in categories:
             continue
         if len(matches) > len(best_matches):
-            best_form, best_matches = form, matches
-    return best_form, best_matches
+            best_form, best_matches, best_unmatched = form, matches, unmatched
+    return best_form, best_matches, best_unmatched
 
 
 def fill_form(form, matches: list[tuple], sender_name: str, sender_email: str,
-              subject: str, body: str) -> bool:
+              subject: str, body: str, sender_phone: str = "") -> bool:
     """Fills the recognized fields found by find_best_form. Returns
     whether at least one field was filled."""
     values = {
         "email": sender_email,
         "name": sender_name,
+        "phone": sender_phone,
         "subject": subject,
         "message": body,
     }
@@ -187,6 +213,7 @@ def submit_form(form) -> bool:
 
 def crawl_target_headless(browser, url: str, name: str, company: str, sender_name: str,
                            sender_email: str, subject: str, body: str,
+                           sender_phone: str = "",
                            dry_run: bool = False, screenshot_path: str | None = None) -> dict:
     """Headless crawl for one shop: finds the contact form and fills it.
 
@@ -210,23 +237,23 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         # don't go hunting for a "Kontakt" nav link that might point
         # somewhere else (a different/legacy contact page) and wander
         # away from the exact page you gave us.
-        form, matches = find_best_form(page)
+        form, matches, unmatched = find_best_form(page)
         if form is not None:
             contact_url = page.url
         else:
             contact_url = find_contact_page(page, url)
             if contact_url != url:
                 page.goto(contact_url, timeout=30000)
-                form, matches = find_best_form(page)
+                form, matches, unmatched = find_best_form(page)
             else:
                 contact_url = page.url
 
         if form is None:
-            return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found"}
+            return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found", "unmatched_fields": []}
 
-        filled = fill_form(form, matches, sender_name, sender_email, subject, body)
+        filled = fill_form(form, matches, sender_name, sender_email, subject, body, sender_phone)
         if not filled:
-            return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found"}
+            return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found", "unmatched_fields": unmatched}
 
         if screenshot_path:
             try:
@@ -241,15 +268,15 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
                     pass
 
         if has_captcha(page):
-            return {"status": "needs_manual", "contact_url": contact_url, "error": None}
+            return {"status": "needs_manual", "contact_url": contact_url, "error": None, "unmatched_fields": unmatched}
 
         if dry_run:
-            return {"status": "pending_review", "contact_url": contact_url, "error": None}
+            return {"status": "pending_review", "contact_url": contact_url, "error": None, "unmatched_fields": unmatched}
 
         if submit_form(form):
-            return {"status": "submitted", "contact_url": contact_url, "error": None}
-        return {"status": "failed", "contact_url": contact_url, "error": "no submit button found"}
+            return {"status": "submitted", "contact_url": contact_url, "error": None, "unmatched_fields": unmatched}
+        return {"status": "failed", "contact_url": contact_url, "error": "no submit button found", "unmatched_fields": unmatched}
     except Exception as exc:
-        return {"status": "failed", "contact_url": url, "error": str(exc)}
+        return {"status": "failed", "contact_url": url, "error": str(exc), "unmatched_fields": []}
     finally:
         page.close()

@@ -289,6 +289,8 @@ function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
     <input id="f_name" value="${gen.sender_name || ""}">
     <label>Sender email</label>
     <input id="f_email" value="${gen.sender_email || ""}">
+    <label>Sender phone (optional)</label>
+    <input id="f_phone" value="${gen.sender_phone || ""}">
     <label>Subject</label>
     <input id="f_subject" value="${(gen.subject || "").replace(/"/g, "&quot;")}">
     <label>Message</label>
@@ -296,6 +298,7 @@ function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
     <button id="fillBtn">Fill form on page</button>
     <button id="submittedBtn" class="secondary" disabled>Submitted -- next</button>
     <button id="skipBtn" class="secondary">Skip -- next</button>
+    <div id="unmatchedNote" class="muted" style="margin-top:0.5rem;font-size:0.78rem"></div>
   `;
 
   container.querySelector("#fillBtn").addEventListener("click", async () => {
@@ -304,12 +307,19 @@ function renderPreviewForm(container, gen, { onFill, onSubmitted, onSkip }) {
       const result = await onFill({
         name: document.getElementById("f_name").value,
         email: document.getElementById("f_email").value,
+        phone: document.getElementById("f_phone").value,
         subject: document.getElementById("f_subject").value,
         message: document.getElementById("f_message").value,
       });
       if (result.ok) {
         setStatus(`Filled ${result.filledCount} field(s) -- review, solve any CAPTCHA, submit yourself.`, true);
         container.querySelector("#submittedBtn").disabled = false;
+        const unmatched = result.unmatchedFields || [];
+        const noteEl = container.querySelector("#unmatchedNote");
+        if (noteEl && unmatched.length > 0) {
+          const names = unmatched.map((f) => f.label || f.placeholder || f.name || f.id || "?");
+          noteEl.textContent = `${unmatched.length} field(s) not filled: ${names.join(", ")} -- tell Claude about these if you want support added.`;
+        }
       } else {
         setStatus(result.error, false);
       }

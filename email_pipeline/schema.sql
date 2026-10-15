@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS form_targets (
     subject TEXT,
     body TEXT,
     screenshot TEXT,
+    -- JSON list of fields on the form we couldn't classify (so nothing
+    -- was typed into them) -- e.g. a "Firma"/company field, a dropdown,
+    -- a date picker. Surfaced in the UI so you notice and can ask for
+    -- support to be added, instead of it silently staying blank.
+    unmatched_fields TEXT,
     error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT

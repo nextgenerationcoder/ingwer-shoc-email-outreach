@@ -37,7 +37,7 @@ def _rename_outdated_form_targets(conn: sqlite3.Connection) -> bool:
     if "form_targets" not in tables:
         return False
     cols = {r[1] for r in conn.execute("PRAGMA table_info(form_targets)").fetchall()}
-    if "screenshot" in cols:
+    if "screenshot" in cols and "unmatched_fields" in cols:
         return False  # already current
 
     conn.execute("ALTER TABLE form_targets RENAME TO form_targets_old")

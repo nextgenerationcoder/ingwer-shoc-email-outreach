@@ -77,18 +77,22 @@ def run(targets_csv: str):
                 # use the page you gave us directly if it already has a
                 # real contact form -- don't wander off to a "Kontakt"
                 # nav link that might point to a different page
-                form, matches = find_best_form(page)
+                form, matches, unmatched = find_best_form(page)
                 if form is None:
                     contact_url = find_contact_page(page, url)
                     if contact_url != url:
                         page.goto(contact_url, timeout=30000)
-                        form, matches = find_best_form(page)
+                        form, matches, unmatched = find_best_form(page)
 
                 if form is None:
                     print("  could not find/fill a form -- skipping")
                     page.close()
                     time.sleep(random.uniform(5, 15))
                     continue
+
+                if unmatched:
+                    names = [u.get("label") or u.get("placeholder") or u.get("name") or u.get("id") or "?" for u in unmatched]
+                    print(f"  note: {len(unmatched)} field(s) on this form aren't being filled: {', '.join(names)}")
 
                 subject, body = generate_from_fields(
                     name=name,

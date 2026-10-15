@@ -69,6 +69,12 @@
         {% if t['status'] == 'failed' and t['error'] %}
         <span class="muted">{{ t['error'] }}</span>
         {% endif %}
+        {% if t['status'] == 'needs_manual' and t['unmatched_fields'] %}
+        <div class="muted" style="margin-top:0.3rem;font-size:0.75rem">
+          {{ t['unmatched_fields']|length }} unfilled field(s):
+          {% for f in t['unmatched_fields'] %}{{ f.label or f.placeholder or f.name or f.id or '?' }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+        {% endif %}
       </td>
     </tr>
     {% if t['status'] == 'pending_review' %}
@@ -81,6 +87,15 @@
           {% endif %}
           <div class="subject">Subject: {{ t['subject'] }}</div>
           <div>{{ t['body'] }}</div>
+          {% if t['unmatched_fields'] %}
+          <div class="muted" style="margin-top:0.6rem">
+            <strong>{{ t['unmatched_fields']|length }} field(s) on this form aren't being filled:</strong>
+            {% for f in t['unmatched_fields'] %}
+              {{ f.label or f.placeholder or f.name or f.id or '?' }}{% if f.type in ('checkbox','radio') %} ({{ f.type }}){% endif %}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+            -- edit the <a href="{{ url_for('prompt_page') }}">prompt</a> won't help here, this needs a new field type added to the code.
+          </div>
+          {% endif %}
           <form method="post" action="{{ url_for('approve_form_route', target_id=t['id']) }}" style="display:inline">
             <button type="submit">Approve &amp; submit</button>
           </form>

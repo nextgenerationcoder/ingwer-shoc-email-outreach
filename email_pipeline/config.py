@@ -82,6 +82,14 @@ def get_contact_reply_email() -> str:
     return mailboxes[0].username if mailboxes else ""
 
 
+def get_contact_phone() -> str:
+    """The phone number put into contact-form 'phone' fields, if present.
+    Left blank by default -- phone fields are skipped entirely when this
+    isn't set."""
+    return _setting("contact_phone", "CONTACT_PHONE", "")
+
+
+
 def get_daily_min_per_mailbox() -> int:
     return int(_setting("daily_min_per_mailbox", "DAILY_MIN_PER_MAILBOX", "10"))
 
