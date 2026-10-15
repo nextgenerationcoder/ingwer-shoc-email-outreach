@@ -32,7 +32,7 @@ FIELD_KEYWORDS = {
     "phone": ["phone", "telefon", "mobile", "handy", "fax"],
     "address": ["address", "adresse", "strasse", "straße", "anschrift", "plz", "postleitzahl", "postal"],
     "subject": ["subject", "betreff", "topic", "reason"],
-    "message": ["message", "nachricht", "comment", "anliegen", "inquiry", "body", "frage"],
+    "message": ["message", "nachricht", "comment", "kommentar", "anliegen", "inquiry", "body", "frage"],
 }
 
 
