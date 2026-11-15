@@ -243,12 +243,13 @@ def import_contacts_route():
                 continue
             try:
                 conn.execute(
-                    "INSERT INTO contacts (email, name, company, source, "
-                    "assigned_mailbox_id) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO contacts (email, name, company, website, source, "
+                    "assigned_mailbox_id) VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         email,
                         row.get("name"),
                         row.get("company"),
+                        row.get("website"),
                         row.get("source"),
                         assign_mailbox(email),
                     ),
@@ -568,10 +569,11 @@ def delete_pending_forms_route():
 @app.route("/test", methods=["GET", "POST"])
 def test_page():
     result = None
-    form = {"name": "", "company": "", "to_email": ""}
+    form = {"name": "", "company": "", "website": "", "to_email": ""}
     if request.method == "POST":
         form["name"] = request.form.get("name", "")
         form["company"] = request.form.get("company", "")
+        form["website"] = request.form.get("website", "")
         form["to_email"] = request.form.get("to_email", "")
 
         subject, body = generate_from_fields(
@@ -581,6 +583,7 @@ def test_page():
             product_description=config.get_product_description(),
             api_key=config.get_deepseek_api_key(),
             prompt_template=config.get_prompt_template_override(),
+            website=form["website"],
         )
         result = {"subject": subject, "body": body}
 

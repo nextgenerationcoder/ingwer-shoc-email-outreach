@@ -5,6 +5,11 @@ CREATE TABLE IF NOT EXISTS contacts (
     email TEXT NOT NULL UNIQUE,
     name TEXT,
     company TEXT,
+    -- the shop's own website, fetched server-side (website_research.py)
+    -- and handed to the AI as research context -- see generate.py's
+    -- RESEARCH step. Optional: a contact imported without one just gets
+    -- a more general, less-personalized email.
+    website TEXT,
     source TEXT,
     -- pending: never contacted, eligible to be queued
     -- queued: picked for today's batch, waiting to be sent

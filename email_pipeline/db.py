@@ -20,6 +20,17 @@ def init_db() -> None:
         conn.executescript(schema)
         if needs_copy:
             _copy_form_targets_old(conn)
+        _add_contacts_website_column(conn)
+
+
+def _add_contacts_website_column(conn: sqlite3.Connection) -> None:
+    """CREATE TABLE IF NOT EXISTS in schema.sql never adds a column to a
+    contacts table left over from before `website` existed -- a plain,
+    non-destructive ALTER TABLE is enough here (unlike form_targets above,
+    there's no CHECK constraint to rebuild, just a new nullable column)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(contacts)").fetchall()}
+    if "website" not in cols:
+        conn.execute("ALTER TABLE contacts ADD COLUMN website TEXT")
 
 
 def _rename_outdated_form_targets(conn: sqlite3.Connection) -> bool:

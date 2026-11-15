@@ -121,7 +121,11 @@ just "the process doesn't stop", not any specific platform.
    python -m email_pipeline.import_contacts contacts.csv
    ```
 
-   CSV needs an `email` column; `name`, `company`, `source` are optional.
+   CSV needs an `email` column; `name`, `company`, `website`, `source` are
+   optional. `website` is fetched server-side and given to the AI as
+   research context (see `generate.py`'s `DEFAULT_PROMPT_TEMPLATE`) so the
+   email can genuinely reference what that shop sells, instead of staying
+   generic.
 
 4. Cron (edit with `crontab -e`):
 

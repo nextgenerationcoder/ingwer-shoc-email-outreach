@@ -22,8 +22,13 @@
   </form>
   <p class="muted" style="margin-top:1rem">
     Use <code>{name}</code>, <code>{company}</code>, <code>{sender_company}</code>, <code>{product_description}</code>, <code>{website}</code> as placeholders --
-    they get filled in per contact (<code>{website}</code> is only set for contact-form outreach, blank for regular email). Any other
-    <code>{placeholder}</code> is left as-is rather than causing an error. Try changes on the <a href="{{ url_for('test_page') }}">Test &amp; Preview</a> page before running live.
+    they get filled in per contact (<code>{website}</code> comes from the contact's <code>website</code> column for
+    regular email, or the shop URL for contact-form outreach; blank if none is on file). If your prompt also
+    contains <code>{website_content}</code>, that website is actually fetched (via the same headless browser the
+    form-outreach crawler uses) and its visible text is put there as research context, so the AI can personalize
+    the email instead of guessing -- this only runs when the prompt references <code>{website_content}</code>, so a
+    prompt that doesn't use it skips the fetch entirely. Any other <code>{placeholder}</code> is left as-is rather
+    than causing an error. Try changes on the <a href="{{ url_for('test_page') }}">Test &amp; Preview</a> page before running live.
   </p>
 </div>
 {% endblock %}

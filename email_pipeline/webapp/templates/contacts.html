@@ -2,7 +2,7 @@
 {% block content %}
 <div class="card">
   <h2>Import contacts</h2>
-  <p class="muted">CSV with an <code>email</code> column (name, company, source optional). Duplicates are skipped automatically.</p>
+  <p class="muted">CSV with an <code>email</code> column (name, company, website, source optional). Duplicates are skipped automatically. <code>website</code> is fetched and used as research context for the AI-written email (see the AI Prompt page) -- a contact without one still gets emailed, just with a more general, less-personalized text.</p>
   <form method="post" action="{{ url_for('import_contacts_route') }}" enctype="multipart/form-data">
     <input type="file" name="csv_file" accept=".csv" required>
     <button type="submit">Import</button>
@@ -13,12 +13,13 @@
   <h2>Contacts <span class="muted">(most recent 300)</span></h2>
   {% if contacts %}
   <table>
-    <tr><th>Email</th><th>Name</th><th>Company</th><th>Mailbox</th><th>Status</th><th></th></tr>
+    <tr><th>Email</th><th>Name</th><th>Company</th><th>Website</th><th>Mailbox</th><th>Status</th><th></th></tr>
     {% for c in contacts %}
     <tr>
       <td>{{ c['email'] }}</td>
       <td>{{ c['name'] or '-' }}</td>
       <td>{{ c['company'] or '-' }}</td>
+      <td>{{ c['website'] or '-' }}</td>
       <td>{{ c['assigned_mailbox_id'] }}</td>
       <td><span class="badge badge-{{ c['status'] }}">{{ c['status'] }}</span></td>
       <td>

@@ -14,6 +14,8 @@
         <input type="text" name="company" value="{{ form.company }}" placeholder="e.g. Bio Laden Berlin">
       </div>
     </div>
+    <label>Recipient website (actually fetched and used as research context -- see the AI Prompt page)</label>
+    <input type="text" name="website" value="{{ form.website }}" placeholder="https://example.com">
     <button type="submit" name="action" value="preview">Generate preview</button>
 
     <fieldset>

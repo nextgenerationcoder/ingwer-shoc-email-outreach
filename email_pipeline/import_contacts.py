@@ -4,8 +4,10 @@ Load contacts into the database.
 Usage:
     python -m email_pipeline.import_contacts contacts.csv
 
-CSV columns expected: email,name,company,source (only "email" is required;
-the rest may be blank).
+CSV columns expected: email,name,company,website,source (only "email" is
+required; the rest may be blank). "website" is used to personalize the
+email (see generate.py's RESEARCH step) -- a contact without one still
+gets emailed, just with a more general, less-personalized text.
 
 Emails already present in the DB are skipped (never re-imported/re-queued),
 which is part of what guarantees rule (b): a contact is only ever entered
@@ -31,12 +33,13 @@ def import_csv(path: str) -> None:
             mailbox_id = assign_mailbox(email)
             try:
                 conn.execute(
-                    "INSERT INTO contacts (email, name, company, source, "
-                    "assigned_mailbox_id) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO contacts (email, name, company, website, source, "
+                    "assigned_mailbox_id) VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         email,
                         row.get("name"),
                         row.get("company"),
+                        row.get("website"),
                         row.get("source"),
                         mailbox_id,
                     ),
