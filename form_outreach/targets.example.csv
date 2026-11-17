@@ -1,2 +1,3 @@
-url,name,company
-https://example-shop.de,Anna,Example Bio Laden
+url,name,company,is_contact_page
+https://example-shop.de,Anna,Example Bio Laden,
+https://example-shop.de/kontakt,Anna,Example Bio Laden,1

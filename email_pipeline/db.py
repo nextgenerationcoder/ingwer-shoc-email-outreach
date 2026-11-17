@@ -21,6 +21,7 @@ def init_db() -> None:
         if needs_copy:
             _copy_form_targets_old(conn)
         _add_contacts_website_column(conn)
+        _add_form_targets_is_contact_page_column(conn)
 
 
 def _add_contacts_website_column(conn: sqlite3.Connection) -> None:
@@ -31,6 +32,15 @@ def _add_contacts_website_column(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(contacts)").fetchall()}
     if "website" not in cols:
         conn.execute("ALTER TABLE contacts ADD COLUMN website TEXT")
+
+
+def _add_form_targets_is_contact_page_column(conn: sqlite3.Connection) -> None:
+    """Same non-destructive ALTER as _add_contacts_website_column above --
+    existing rows default to 0 (treat `url` as a general website, same
+    behavior as before this column existed)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(form_targets)").fetchall()}
+    if "is_contact_page" not in cols:
+        conn.execute("ALTER TABLE form_targets ADD COLUMN is_contact_page INTEGER NOT NULL DEFAULT 0 CHECK (is_contact_page IN (0, 1))")
 
 
 def _rename_outdated_form_targets(conn: sqlite3.Connection) -> bool:

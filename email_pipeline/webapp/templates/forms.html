@@ -37,15 +37,27 @@
         <input type="text" name="company" placeholder="Example Bio Laden">
       </div>
     </div>
+    <label style="display:flex;align-items:center;gap:0.4rem;font-weight:normal;margin-top:0.5rem">
+      <input type="checkbox" name="is_contact_page" style="width:auto">
+      This URL is already the exact contact-form page (skip looking for a "Kontakt" link)
+    </label>
     <button type="submit">Add</button>
   </form>
 </div>
 
 <div class="card">
   <h2>Add shop URLs</h2>
-  <p class="muted">CSV with a <code>url</code> column (name, company optional).</p>
+  <p class="muted">
+    CSV with a <code>url</code> column (name, company optional). An optional <code>is_contact_page</code>
+    column (1/true/yes per row) marks individual rows as already being the exact contact-form page rather
+    than a general website -- rows without that column use the checkbox below instead.
+  </p>
   <form method="post" action="{{ url_for('import_forms_route') }}" enctype="multipart/form-data">
     <input type="file" name="csv_file" accept=".csv" required>
+    <label style="display:flex;align-items:center;gap:0.4rem;font-weight:normal;margin:0.5rem 0">
+      <input type="checkbox" name="is_contact_page" style="width:auto">
+      Every URL in this file is already an exact contact-form page (not a general website)
+    </label>
     <button type="submit">Import</button>
   </form>
 </div>
@@ -54,11 +66,12 @@
   <h2>Targets <span class="muted">(most recent 300)</span></h2>
   {% if targets %}
   <table>
-    <tr><th>Shop</th><th>URL</th><th>Status</th><th>Action</th></tr>
+    <tr><th>Shop</th><th>URL</th><th>Type</th><th>Status</th><th>Action</th></tr>
     {% for t in targets %}
     <tr>
       <td>{{ t['company'] or t['name'] or '-' }}</td>
       <td><a href="{{ t['url'] }}" target="_blank" rel="noopener">{{ t['url'] }}</a></td>
+      <td class="muted" style="font-size:0.8rem">{{ 'contact page' if t['is_contact_page'] else 'website' }}</td>
       <td><span class="badge badge-{{ 'sent' if t['status']=='submitted' else ('pending' if t['status'] in ('needs_manual','pending_review') else t['status']) }}">{{ t['status'] }}</span></td>
       <td>
         {% if t['status'] in ('pending', 'failed', 'needs_manual') %}
@@ -85,7 +98,7 @@
     </tr>
     {% if t['status'] == 'pending_review' %}
     <tr>
-      <td colspan="4">
+      <td colspan="5">
         <div class="preview-box">
           <div class="subject">Filled form preview -- {{ t['contact_url'] }}</div>
           {% if t['screenshot'] %}

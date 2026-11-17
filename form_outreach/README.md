@@ -44,6 +44,13 @@ cp form_outreach/targets.example.csv targets.csv
 python -m form_outreach.crawl targets.csv
 ```
 
+`targets.csv` needs a `url` column (`name`, `company` optional). Add an
+`is_contact_page` column (1/true/yes per row) for any URL that's already
+the exact contact-form page, not a general website -- this skips step 1
+(finding the contact page) for that row and goes straight to filling the
+form on the page you gave it; if there's no form there, it's reported as
+failed instead of wandering off to search the site for one.
+
 ## Known limitations
 
 - Form detection is heuristic (matches field names/labels/placeholders

@@ -171,8 +171,13 @@ def api_add_target():
         return jsonify({"error": "missing url"}), 400
     with db.connection() as conn:
         cur = conn.execute(
-            "INSERT INTO form_targets (url, name, company) VALUES (?, ?, ?)",
-            (url, data.get("name", "").strip(), data.get("company", "").strip()),
+            "INSERT INTO form_targets (url, name, company, is_contact_page) VALUES (?, ?, ?, ?)",
+            (
+                url,
+                data.get("name", "").strip(),
+                data.get("company", "").strip(),
+                1 if data.get("is_contact_page") else 0,
+            ),
         )
         target_id = cur.lastrowid
     return jsonify({"id": target_id})
@@ -295,6 +300,14 @@ def forms_page():
     return render_template("forms.html", active="forms", targets=targets, counts=counts)
 
 
+def _parse_is_contact_page(value) -> int:
+    """Accepts a checkbox ("on"), or a CSV cell written any of the usual
+    truthy ways (1, true, yes, contact...) -- anything else (blank, 0,
+    false, no, website...) means "this is a general website, not the
+    contact-form page itself" (see schema.sql's is_contact_page comment)."""
+    return 1 if str(value or "").strip().lower() in ("1", "true", "yes", "on", "contact", "contact_page", "contact-page") else 0
+
+
 @app.route("/forms/add", methods=["POST"])
 def add_single_form_route():
     url = request.form.get("url", "").strip()
@@ -303,8 +316,13 @@ def add_single_form_route():
         return redirect(url_for("forms_page"))
     with db.connection() as conn:
         cur = conn.execute(
-            "INSERT INTO form_targets (url, name, company) VALUES (?, ?, ?)",
-            (url, request.form.get("name", "").strip(), request.form.get("company", "").strip()),
+            "INSERT INTO form_targets (url, name, company, is_contact_page) VALUES (?, ?, ?, ?)",
+            (
+                url,
+                request.form.get("name", "").strip(),
+                request.form.get("company", "").strip(),
+                _parse_is_contact_page(request.form.get("is_contact_page")),
+            ),
         )
         target_id = cur.lastrowid
     flash("Added -- click Preview to fill and review it.")
@@ -318,6 +336,15 @@ def import_forms_route():
         flash("No file selected.", "error")
         return redirect(url_for("forms_page"))
 
+    # The whole import is either all general websites or all exact
+    # contact-form pages -- a per-row toggle via a radio/checkbox column
+    # would need the CSV author to fill it in correctly for every row,
+    # which is easy to get wrong; a single choice for the whole file,
+    # made once at import time, is harder to mess up. A CSV that DOES
+    # have its own is_contact_page column (e.g. re-exported from this
+    # app, or hand-built with mixed rows) still wins per-row when present.
+    import_default = _parse_is_contact_page(request.form.get("is_contact_page"))
+
     text = file.read().decode("utf-8", errors="ignore")
     reader = csv_module.DictReader(io.StringIO(text))
     added = 0
@@ -326,12 +353,13 @@ def import_forms_route():
             url = (row.get("url") or "").strip()
             if not url:
                 continue
+            is_contact_page = _parse_is_contact_page(row["is_contact_page"]) if "is_contact_page" in row else import_default
             conn.execute(
-                "INSERT INTO form_targets (url, name, company) VALUES (?, ?, ?)",
-                (url, row.get("name"), row.get("company")),
+                "INSERT INTO form_targets (url, name, company, is_contact_page) VALUES (?, ?, ?, ?)",
+                (url, row.get("name"), row.get("company"), is_contact_page),
             )
             added += 1
-    flash(f"Added {added} shop URL(s).")
+    flash(f"Added {added} shop URL(s){' as exact contact-form pages' if import_default else ''}.")
     return redirect(url_for("forms_page"))
 
 
@@ -379,6 +407,7 @@ def run_forms_route():
                 sender_address=reply_address,
                 subject=subject,
                 body=body,
+                is_contact_page=bool(target["is_contact_page"]),
             )
             with db.connection() as conn:
                 conn.execute(
@@ -449,6 +478,7 @@ def preview_form_route(target_id):
             body=body,
             dry_run=True,
             screenshot_path=screenshot_path,
+            is_contact_page=bool(target["is_contact_page"]),
         )
         browser.close()
 
@@ -507,6 +537,7 @@ def approve_form_route(target_id):
             subject=target["subject"],
             body=target["body"],
             dry_run=False,
+            is_contact_page=bool(target["is_contact_page"]),
         )
         browser.close()
 

@@ -72,6 +72,14 @@ CREATE TABLE IF NOT EXISTS form_targets (
     url TEXT NOT NULL,
     name TEXT,
     company TEXT,
+    -- 0 (default): `url` is the shop's general website -- find_contact_page
+    --   looks for a "Kontakt"/"Contact" link on it if there's no form
+    --   right there already.
+    -- 1: `url` IS ALREADY the exact contact-form page -- skip hunting for
+    --   a contact link entirely; if there's no form on this exact page,
+    --   report a clean failure instead of wandering off to a different
+    --   page (see form_crawler.py's crawl_target_headless `is_contact_page`).
+    is_contact_page INTEGER NOT NULL DEFAULT 0 CHECK (is_contact_page IN (0, 1)),
     -- pending: not yet crawled
     -- pending_review: form found, filled, and a screenshot taken -- waiting
     --   for you to look it over and click Approve before it's submitted

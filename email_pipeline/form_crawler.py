@@ -257,7 +257,8 @@ def submit_form(form) -> bool:
 def crawl_target_headless(browser, url: str, name: str, company: str, sender_name: str,
                            sender_email: str, subject: str, body: str,
                            sender_phone: str = "", sender_address: str = "",
-                           dry_run: bool = False, screenshot_path: str | None = None) -> dict:
+                           dry_run: bool = False, screenshot_path: str | None = None,
+                           is_contact_page: bool = False) -> dict:
     """Headless crawl for one shop: finds the contact form and fills it.
 
     dry_run=False (default): auto-submits if there's no CAPTCHA. If there
@@ -270,7 +271,16 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
     you approve it. Call this function again with dry_run=False to
     actually submit once you've approved it (the form gets filled fresh
     each time rather than reusing a kept-open browser tab, since a
-    browser session can't be held open across separate web requests)."""
+    browser session can't be held open across separate web requests).
+
+    is_contact_page=True means the caller already knows `url` IS the
+    exact contact-form page (as opposed to a shop's general website that
+    still needs its contact page found) -- so if no form turns up there,
+    this reports a clean failure instead of going looking for a "Kontakt"
+    nav link and possibly filling/submitting a DIFFERENT page than the
+    one you actually meant (a newsletter signup, a wrong/legacy contact
+    page, etc.). With the default False, a missing form on the given page
+    still falls back to searching for one, same as before."""
     page = browser.new_page()
     try:
         page.goto(url, timeout=30000)
@@ -283,6 +293,13 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         form, matches, unmatched = find_best_form(page)
         if form is not None:
             contact_url = page.url
+        elif is_contact_page:
+            return {
+                "status": "failed",
+                "contact_url": page.url,
+                "error": "no form/fields found on the given contact-form page",
+                "unmatched_fields": [],
+            }
         else:
             contact_url = find_contact_page(page, url)
             if contact_url != url:

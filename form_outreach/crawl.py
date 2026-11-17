@@ -12,7 +12,11 @@ Run:
     python -m form_outreach.crawl targets.csv
 
 targets.csv columns: url (required), name, company (optional, used for
-personalization -- same fields as email_pipeline's contacts.csv).
+personalization -- same fields as email_pipeline's contacts.csv),
+is_contact_page (optional - 1/true/yes if `url` is ALREADY the exact
+contact-form page rather than a general website that still needs its
+contact page found; see email_pipeline/form_crawler.py's
+crawl_target_headless for the same flag on the headless/webapp path).
 """
 import csv
 import random
@@ -67,6 +71,7 @@ def run(targets_csv: str):
             url = row["url"].strip()
             name = row.get("name", "")
             company = row.get("company", "")
+            is_contact_page = str(row.get("is_contact_page") or "").strip().lower() in ("1", "true", "yes")
             print(f"\n=== {company or url} ({url}) ===")
 
             page = browser.new_page()
@@ -76,9 +81,11 @@ def run(targets_csv: str):
 
                 # use the page you gave us directly if it already has a
                 # real contact form -- don't wander off to a "Kontakt"
-                # nav link that might point to a different page
+                # nav link that might point to a different page. If the
+                # CSV already told us this URL IS the exact contact page,
+                # don't even try the fallback search on a miss.
                 form, matches, unmatched = find_best_form(page)
-                if form is None:
+                if form is None and not is_contact_page:
                     contact_url = find_contact_page(page, url)
                     if contact_url != url:
                         page.goto(contact_url, timeout=30000)
@@ -100,6 +107,8 @@ def run(targets_csv: str):
                     sender_company=sender_company,
                     product_description=product_description,
                     api_key=api_key,
+                    prompt_template=config.get_prompt_template_override(),
+                    website=url,
                 )
 
                 ok = fill_and_submit(
