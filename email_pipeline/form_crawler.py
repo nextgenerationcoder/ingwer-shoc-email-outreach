@@ -9,6 +9,8 @@ Shared contact-form crawling logic. Used two ways:
 """
 import re
 
+from .llm_form_filler import apply_actions, classify_fields_with_llm, enumerate_fields
+
 CAPTCHA_SELECTORS = [
     # the actual v2 "I'm not a robot" challenge iframe -- Google titles it
     # exactly "reCAPTCHA"; deliberately NOT matching on iframe src alone,
@@ -244,14 +246,66 @@ def fill_form(form, matches: list[tuple], sender_name: str, sender_email: str,
     return filled_any
 
 
-def submit_form(form) -> bool:
+# Phrases a German (or English, for the rare bilingual site) contact form
+# commonly shows after a REAL successful submission - used by submit_form
+# below as one signal that something actually happened, not an exhaustive
+# list (a site using different wording just falls through to the "form
+# still there, nothing changed" check instead).
+SUCCESS_TEXT_PATTERN = re.compile(
+    r"vielen dank|danke für ihre (nachricht|anfrage)|nachricht (wurde |ist )?(erfolgreich )?"
+    r"(gesendet|übermittelt|versendet|eingegangen)|wir (melden uns|werden uns (bei ihnen )?melden)|"
+    r"thank you|message (has been |was )?sent|successfully sent",
+    re.IGNORECASE,
+)
+
+
+def submit_form(form) -> tuple[bool, str | None]:
+    """Clicks the submit button, then makes a best-effort check that the
+    submission actually went through - rather than treating "the click
+    didn't raise" as success. A required field left blank (e.g. a dropdown
+    with no option selected) makes the BROWSER's own native validation
+    silently block the real submission: the click still "succeeds" as a
+    click, the page just never navigates or changes, and without this
+    check the crawler would wrongly report "submitted" for a message that
+    never actually reached anyone.
+
+    Returns (ok, error) - error is None on success, otherwise a short
+    reason to show in the dashboard/CLI.
+
+    Not foolproof: a form that submits via AJAX with no visible success
+    message and no DOM change would still look unconfirmed here. That's a
+    deliberate trade-off - treating an unconfirmed submission as "failed"
+    (so you notice and check it yourself) is far safer than the previous
+    behavior of trusting every click.
+    """
+    page = form.page
     submit_button = form.locator('button[type="submit"], input[type="submit"]').first
     if submit_button.count() == 0:
         submit_button = form.locator("button").first
     if submit_button.count() == 0:
-        return False
+        return False, "no submit button found"
+
+    url_before = page.url
     submit_button.click(force=True)
-    return True
+    page.wait_for_timeout(2000)
+
+    if page.url != url_before:
+        return True, None  # navigated away - the normal "real" success case
+
+    try:
+        if SUCCESS_TEXT_PATTERN.search(page.inner_text("body")):
+            return True, None
+    except Exception:
+        pass
+
+    try:
+        form_still_present = form.count() > 0 and form.is_visible()
+    except Exception:
+        form_still_present = False
+    if not form_still_present:
+        return True, None  # the form itself is gone/replaced - an AJAX success swap
+
+    return False, "submission could not be confirmed (page unchanged after clicking submit - likely blocked by a required field left empty)"
 
 
 def crawl_target_headless(browser, url: str, name: str, company: str, sender_name: str,
@@ -311,7 +365,29 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         if form is None:
             return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found", "unmatched_fields": []}
 
-        filled = fill_form(form, matches, sender_name, sender_email, subject, body, sender_phone, sender_address)
+        # LLM-based filling (llm_form_filler.py) understands the WHOLE form -
+        # selects, radio groups, split first/last-name fields, a required
+        # "what kind of request is this" dropdown - not just plain text
+        # fields with an obvious name/id/label (see that module's own
+        # comment for why the plain keyword matcher alone isn't enough).
+        # Falls back to the original keyword-only `matches`/`unmatched`
+        # (computed above by find_best_form, text fields only) if no
+        # DeepSeek key is configured or the call fails for any reason, so
+        # the crawler keeps working exactly as before without one.
+        sender = {
+            "full_name": sender_name,
+            "email": sender_email,
+            "phone": sender_phone,
+            "address": sender_address,
+            "subject": subject,
+            "message": body,
+        }
+        llm_fields = enumerate_fields(form)
+        llm_actions = classify_fields_with_llm(llm_fields, sender)
+        if llm_actions is not None:
+            filled, unmatched = apply_actions(llm_fields, llm_actions)
+        else:
+            filled = fill_form(form, matches, sender_name, sender_email, subject, body, sender_phone, sender_address)
         if not filled:
             return {"status": "failed", "contact_url": contact_url, "error": "no form/fields found", "unmatched_fields": unmatched}
 
@@ -333,9 +409,10 @@ def crawl_target_headless(browser, url: str, name: str, company: str, sender_nam
         if dry_run:
             return {"status": "pending_review", "contact_url": contact_url, "error": None, "unmatched_fields": unmatched}
 
-        if submit_form(form):
+        submitted, submit_error = submit_form(form)
+        if submitted:
             return {"status": "submitted", "contact_url": contact_url, "error": None, "unmatched_fields": unmatched}
-        return {"status": "failed", "contact_url": contact_url, "error": "no submit button found", "unmatched_fields": unmatched}
+        return {"status": "failed", "contact_url": contact_url, "error": submit_error, "unmatched_fields": unmatched}
     except Exception as exc:
         return {"status": "failed", "contact_url": url, "error": str(exc), "unmatched_fields": []}
     finally:

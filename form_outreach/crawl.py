@@ -38,10 +38,10 @@ from email_pipeline.form_crawler import (
 )
 
 
-def fill_and_submit(page, form, matches, sender_name: str, sender_email: str, subject: str, body: str) -> bool:
+def fill_and_submit(page, form, matches, sender_name: str, sender_email: str, subject: str, body: str) -> tuple[bool, str | None]:
     filled = fill_form(form, matches, sender_name, sender_email, subject, body)
     if not filled:
-        return False
+        return False, "no form/fields found"
 
     if has_captcha(page):
         print("  CAPTCHA detected -- browser window is open, solve it and")
@@ -50,7 +50,7 @@ def fill_and_submit(page, form, matches, sender_name: str, sender_email: str, su
             page.wait_for_event("close", timeout=5 * 60 * 1000)
         except PWTimeout:
             print("  Timed out waiting -- moving on (submit it manually if you still want to).")
-        return True
+        return True, None
 
     return submit_form(form)
 
@@ -111,7 +111,7 @@ def run(targets_csv: str):
                     website=url,
                 )
 
-                ok = fill_and_submit(
+                ok, submit_error = fill_and_submit(
                     page,
                     form,
                     matches,
@@ -120,7 +120,7 @@ def run(targets_csv: str):
                     subject=subject,
                     body=body,
                 )
-                print("  submitted" if ok else "  could not find/fill a form -- skipping")
+                print("  submitted" if ok else f"  not submitted -- {submit_error}")
             except Exception as exc:
                 print(f"  failed: {exc}")
             finally:
