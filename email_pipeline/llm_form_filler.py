@@ -15,10 +15,10 @@ one of: fill it with specific text, pick a dropdown/radio option, or skip it
 about routing the message (never an optional newsletter opt-in, never a
 medical/insurance detail that isn't ours to answer).
 
-Used as the FIRST choice when a Translation... no, a DeepSeek API key is
-configured (classify_fields_with_llm) - form_crawler.py falls back to the
-plain keyword matcher if there's no key, or if the call fails for any
-reason, so the crawler never just stops working without one.
+Used as the FIRST choice when a DeepSeek API key is configured
+(classify_fields_with_llm) - form_crawler.py falls back to the plain
+keyword matcher if there's no key, or if the call fails for any reason,
+so the crawler never just stops working without one.
 """
 
 import json
@@ -172,15 +172,20 @@ SYSTEM_PROMPT = (
     "sender info explicitly says so.\n"
     "- check: a checkbox or radio group that is REQUIRED to submit the form (e.g. a mandatory privacy-policy "
     "consent checkbox, or a required category/routing choice) - \"value\" is the exact option value to pick.\n"
-    "- skip: anything NOT required and not clearly about routing this specific message (optional newsletter "
-    "opt-ins, medical/insurance details, anything you are not confident about). When in doubt, skip.\n\n"
+    "- skip: anything NOT required, not clearly about routing this specific message, and not confidently "
+    "inferable from the sender info (optional newsletter opt-ins, medical/insurance details, anything you are "
+    "not confident about). When in doubt, skip.\n\n"
     "Rules:\n"
     "- If the form has separate first-name and last-name fields, split the sender's full name correctly - never "
     "put the same value in both.\n"
     "- Never invent information not given to you below.\n"
-    "- Only select/check something that is REQUIRED (see each field's \"required\" flag) or is clearly how this "
-    "message gets routed (e.g. a \"type of inquiry\" dropdown) - leave every optional field alone, including "
-    "optional consent/marketing checkboxes.\n\n"
+    "- Select/check something if it is REQUIRED (see each field's \"required\" flag), OR is clearly how this "
+    "message gets routed (e.g. a \"type of inquiry\" dropdown), OR is a short, low-stakes field whose correct "
+    "value you can confidently infer from the sender info even though it's optional - the clearest example is a "
+    "salutation/title dropdown (Anrede/Titel: Herr/Frau/Divers) inferred from the sender's first name. Still "
+    "leave alone anything that reflects a personal/medical/marketing preference you were not told (insurance "
+    "type, newsletter opt-in, how they heard about the business, etc.) - inferring a salutation from a name is "
+    "fine, guessing at someone's preferences is not.\n\n"
     'Respond with ONLY a JSON object: {"fields": [{"index": 0, "action": "...", "value": "..."}, ...]} - one '
     "entry per field index given to you (value omitted or empty for skip), no commentary, no markdown fences."
 )
