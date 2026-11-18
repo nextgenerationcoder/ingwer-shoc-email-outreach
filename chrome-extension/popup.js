@@ -42,8 +42,44 @@ function waitForTabComplete(tabId, timeoutMs = 20000) {
   });
 }
 
-async function fillCurrentTab(tabId, fields) {
+// Tries the same LLM-based field understanding the headless crawler has
+// (POST /api/forms/classify-fields -> email_pipeline/llm_form_filler.py) -
+// handles selects, radio groups, split first/last-name fields, a required
+// routing dropdown, none of which the old keyword matcher below ever
+// touched. Falls back to that plain keyword matcher if there's no
+// contact form to enumerate, the backend call fails, or it comes back
+// with no actions (e.g. no DeepSeek key configured server-side) - the
+// extension never just stops working without one.
+async function fillCurrentTab(tabId, fields, baseUrl, apiKey) {
   await chrome.scripting.executeScript({ target: { tabId }, files: ["fill-logic.js"] });
+
+  try {
+    const [{ result: enumerated }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => enumerateFormFieldsOnPage(),
+    });
+    if (enumerated.ok) {
+      const classified = await apiFetch(baseUrl, apiKey, "/api/forms/classify-fields", {
+        method: "POST",
+        body: JSON.stringify({
+          fields: enumerated.fields,
+          sender: { full_name: fields.name, email: fields.email, phone: fields.phone, address: fields.address, subject: fields.subject, message: fields.message },
+        }),
+      });
+      if (classified.actions) {
+        const [{ result }] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: (actions) => applyFieldActionsOnPage(actions),
+          args: [classified.actions],
+        });
+        return result;
+      }
+    }
+  } catch (e) {
+    // network error, no API key, backend down, etc. - fall through to the
+    // local keyword matcher rather than leaving the user with nothing
+  }
+
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
     func: (f) => fillContactFormOnPage(f),
@@ -133,7 +169,7 @@ function showSingleTarget(baseUrl, apiKey, tabId, target) {
       const gen = await apiFetch(baseUrl, apiKey, `/api/forms/${target.id}/generate`, { method: "POST" });
       renderPreviewForm(document.getElementById("preview"), gen, {
         onFill: async (fields) => {
-          const result = await fillCurrentTab(tabId, fields);
+          const result = await fillCurrentTab(tabId, fields, baseUrl, apiKey);
           return result;
         },
         onSubmitted: async () => {
@@ -191,12 +227,19 @@ async function goToBatchItem(baseUrl, apiKey, batch) {
 
   let fillResult;
   try {
-    fillResult = await fillCurrentTab(batch.tabId, {
-      name: gen.sender_name,
-      email: gen.sender_email,
-      subject: gen.subject,
-      message: gen.body,
-    });
+    fillResult = await fillCurrentTab(
+      batch.tabId,
+      {
+        name: gen.sender_name,
+        email: gen.sender_email,
+        phone: gen.sender_phone,
+        address: gen.sender_address,
+        subject: gen.subject,
+        message: gen.body,
+      },
+      baseUrl,
+      apiKey
+    );
   } catch (err) {
     fillResult = { ok: false, error: err.message };
   }
@@ -232,7 +275,7 @@ function renderBatchItem(baseUrl, apiKey, batch, gen, fillResult) {
   } else {
     renderPreviewForm(document.getElementById("preview"), gen, {
       showFillButton: true,
-      onFill: (fields) => fillCurrentTab(batch.tabId, fields),
+      onFill: (fields) => fillCurrentTab(batch.tabId, fields, baseUrl, apiKey),
       onSubmitted: () => advanceBatch(baseUrl, apiKey, batch, "submitted"),
       onSkip: () => advanceBatch(baseUrl, apiKey, batch, "skip"),
     });

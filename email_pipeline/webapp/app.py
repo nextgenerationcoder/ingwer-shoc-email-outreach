@@ -26,6 +26,7 @@ from ..sender import send_email
 from ..plan_daily import plan_today
 from ..worker import run_due_sends
 from ..form_crawler import crawl_target_headless
+from ..llm_form_filler import classify_fields_with_llm
 from .scheduler import start_scheduler
 
 app = Flask(__name__)
@@ -137,6 +138,32 @@ def api_generate(target_id):
         "sender_phone": config.get_contact_phone(),
         "sender_address": config.get_contact_address(),
     })
+
+
+@app.route("/api/forms/classify-fields", methods=["POST"])
+@require_api_key
+def api_classify_fields():
+    """Backs the Chrome extension's field filling - same LLM-based field
+    understanding as the headless crawler (llm_form_filler.py), just fed a
+    field list the extension's content script enumerated from the page in
+    the browser instead of one Playwright enumerated. No Playwright/DOM
+    object ever crosses this boundary - just plain JSON in, plain JSON out
+    - so classify_fields_with_llm (which already only reads name/tag/label/
+    options/etc, never the field's "locator") works completely unchanged.
+
+    Returns {"actions": null} rather than an error when no DeepSeek key is
+    configured or the call fails, so the extension can fall back to its own
+    local keyword matcher - same "never just stop working" behavior as the
+    headless crawler has.
+    """
+    data = request.get_json(silent=True) or {}
+    fields = data.get("fields")
+    sender = data.get("sender")
+    if not isinstance(fields, list) or not isinstance(sender, dict):
+        return jsonify({"error": "fields (list) and sender (object) are required"}), 400
+
+    actions = classify_fields_with_llm(fields, sender)
+    return jsonify({"actions": actions})
 
 
 @app.route("/api/forms/<int:target_id>/submitted", methods=["POST"])
