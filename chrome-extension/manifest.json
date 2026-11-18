@@ -1,12 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Ingwer Shoc Form Outreach",
-  "version": "1.1.0",
-  "description": "Fill contact forms using your own browser (dodges bot-detection/CAPTCHA), submit them yourself -- syncs with the Form Outreach dashboard. AI-assisted field detection (dropdowns, radio groups, split name fields), falls back to a local keyword matcher if unavailable.",
+  "version": "1.2.0",
+  "description": "Fill contact forms using your own browser (dodges bot-detection/CAPTCHA), submit them yourself -- syncs with the Form Outreach dashboard. AI-assisted field detection (dropdowns, radio groups, split name fields), falls back to a local keyword matcher if unavailable. Batch mode runs in a background worker so it survives the popup closing.",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html"
   },
-  "options_page": "options.html"
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  }
 }
